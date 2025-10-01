@@ -69,10 +69,10 @@ public:
             return new_client;
         }
 
-        // Wait for an available client from any host
-        _pool_cv.wait(lock, [this]() {
-            return !_pool.empty() || _current_size < _max_pool_size;
-        });
+        // Wait for an available client from any host (IDA SDK compatible)
+        while (_pool.empty() && _current_size >= _max_pool_size) {
+            _pool_cv.wait(lock);
+        }
 
         // Try again to get a client
         if (!_pool.empty()) {

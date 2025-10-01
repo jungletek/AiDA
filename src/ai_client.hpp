@@ -14,6 +14,9 @@
 namespace httplib { class Client; }
 #include "settings.hpp"
 
+// Forward declaration to avoid circular dependency
+class UnifiedAIClient;
+
 class AIClientBase
 {
 public:

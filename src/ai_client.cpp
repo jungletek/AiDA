@@ -223,8 +223,10 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
     // Wait for any existing worker thread to complete safely
     if (_worker_thread.joinable())
     {
-        // Use condition variable to wait safely instead of blocking join
-        _task_done.wait(lock, [this]() { return _task_done.load(); });
+        // Use condition variable to wait safely instead of blocking join (IDA SDK compatible)
+        while (!_task_done.load()) {
+            _task_done.wait(lock);
+        }
         if (_worker_thread.joinable())
         {
             _worker_thread.join();
@@ -844,7 +846,7 @@ std::unique_ptr<UnifiedAIClient> get_ai_client(const settings_t& settings)
         if (client->is_available())
         {
             msg("AI Assistant: Successfully initialized unified AI client for %s\n", provider.c_str());
-            return client;
+            return std::move(client);
         }
         else
         {
