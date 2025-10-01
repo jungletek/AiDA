@@ -1,7 +1,29 @@
 #include "aida_pro.hpp"
 #include "debug_logger.hpp"
+
 using json = nlohmann::json;
 
+// RAII wrapper for HTTP client to ensure proper cleanup
+class HTTPClientRAII {
+private:
+    std::shared_ptr<httplib::Client> client;
+    std::mutex& client_mutex;
+    
+public:
+    HTTPClientRAII(const std::string& host, std::mutex& mutex) 
+        : client(std::make_shared<httplib::Client>(host.c_str())), client_mutex(mutex) {}
+    
+    ~HTTPClientRAII() {
+        std::lock_guard<std::mutex> lock(client_mutex);
+        if (client) {
+            client->stop();
+            client.reset();
+        }
+    }
+    
+    std::shared_ptr<httplib::Client> get() const { return client; }
+    bool valid() const { return client != nullptr; }
+};
 
 static int idaapi timer_cb(void* ud);
 
@@ -204,17 +226,18 @@ std::string AIClient::_http_post_request(
     DebugLogger::log_api_call(_model_name, "_http_post_request");
     DebugLogger::log_request(_model_name, host + path, body);
     
-    std::shared_ptr<httplib::Client> current_client;
+    // Use RAII wrapper for HTTP client to ensure proper cleanup
+    HTTPClientRAII http_client_raii(host, _http_client_mutex);
+    auto current_client = http_client_raii.get();
+    
+    if (!current_client || !http_client_raii.valid()) {
+        return "Error: Failed to create HTTP client";
+    }
+    
     auto start_time = std::chrono::steady_clock::now();
     
     try
     {
-        {
-            std::lock_guard<std::mutex> lock(_http_client_mutex);
-            _http_client = std::make_shared<httplib::Client>(host.c_str());
-            current_client = _http_client;
-        }
-
         current_client->set_default_headers(headers);
         current_client->set_read_timeout(600); // 10 minutes
         current_client->set_connection_timeout(10);
@@ -227,11 +250,6 @@ std::string AIClient::_http_post_request(
             [this](uint64_t, uint64_t) {
                 return !_cancelled.load();
             });
-
-        {
-            std::lock_guard<std::mutex> lock(_http_client_mutex);
-            _http_client.reset();
-        }
 
         auto end_time = std::chrono::steady_clock::now();
         auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
@@ -274,10 +292,6 @@ std::string AIClient::_http_post_request(
     }
     catch (const std::exception& e)
     {
-        {
-            std::lock_guard<std::mutex> lock(_http_client_mutex);
-            _http_client.reset();
-        }
         DebugLogger::log_error("HTTP request exception", e);
         warning("AI Assistant: API call to %s failed: %s\n", host.c_str(), e.what());
         return std::string("Error: API call failed. Details: ") + e.what();
