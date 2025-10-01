@@ -7,6 +7,11 @@
 #include <name.hpp>
 #include <xref.hpp>
 #include <struct.hpp>
+// IDA SDK compatibility fix for missing struct.hpp
+#ifndef HAVE_STRUCT_HPP
+// Define minimal struct functionality if header is missing
+typedef struct _struc_t struc_t;
+#endif
 #include <typeinf.hpp>
 #include <nalt.hpp>
 #include <bytes.hpp>
