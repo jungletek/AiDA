@@ -47,6 +47,7 @@ public:
     AIClient(const settings_t& settings);
     ~AIClient() override;
 
+    bool is_available() const override;
     void analyze_function(ea_t ea, callback_t callback) override;
     void suggest_name(ea_t ea, callback_t callback) override;
     void generate_struct(ea_t ea, callback_t callback) override;

@@ -221,7 +221,7 @@ std::string AIClient::_http_post_request(
     const std::string& path,
     const httplib::Headers& headers,
     const std::string& body,
-    std::function<std::string(const json&)> response_parser)
+    std::function<std::string(const nlohmann::json&)> response_parser)
 {
     DebugLogger::log_api_call(_model_name, "_http_post_request");
     DebugLogger::log_request(_model_name, host + path, body);
@@ -277,17 +277,52 @@ std::string AIClient::_http_post_request(
             {
                 try
                 {
-                    error_details = json::parse(res->body).dump(2).c_str();
+                    // Add bounds checking for JSON parsing
+                    DebugLogger::log_json_parsing("API Error Response", res->body);
+                    const size_t MAX_ERROR_RESPONSE_SIZE = 1024 * 1024; // 1MB
+                    DebugLogger::log_bounds_check("Error Response Size", res->body.size(), MAX_ERROR_RESPONSE_SIZE);
+                    
+                    if (res->body.size() > MAX_ERROR_RESPONSE_SIZE) {
+                        error_details = "Response too large for parsing";
+                    } else {
+                        error_details = json::parse(res->body).dump(2).c_str();
+                    }
                 }
-                catch (const json::parse_error&)
+                catch (const json::parse_error& e)
                 {
+                    DebugLogger::log_error("JSON Parse Error in API Error", e);
                     error_details = res->body.c_str();
+                }
+                catch (const std::exception& e)
+                {
+                    DebugLogger::log_error("Exception in API Error parsing", e);
+                    error_details = "Error parsing response: " + std::string(e.what());
                 }
             }
             msg("AiDA: API Error. Host: %s, Status: %d\nResponse body: %s\n", host.c_str(), res->status, error_details.c_str());
             return "Error: API returned status " + std::to_string(res->status);
         }
-        json jres = json::parse(res->body);
+        
+        // Add comprehensive bounds checking for main response parsing
+        DebugLogger::log_json_parsing("Main API Response", res->body);
+        const size_t MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
+        DebugLogger::log_bounds_check("Main Response Size", res->body.size(), MAX_RESPONSE_SIZE);
+        
+        if (res->body.size() > MAX_RESPONSE_SIZE) {
+            return "Error: Response too large for processing";
+        }
+        
+        json jres;
+        try {
+            jres = json::parse(res->body);
+        } catch (const json::parse_error& e) {
+            DebugLogger::log_error("JSON Parse Error in Main Response", e);
+            return "Error: Failed to parse API response: " + std::string(e.what());
+        } catch (const std::exception& e) {
+            DebugLogger::log_error("Exception in Main Response parsing", e);
+            return "Error: Exception parsing API response: " + std::string(e.what());
+        }
+        
         return response_parser(jres);
     }
     catch (const std::exception& e)
@@ -296,6 +331,12 @@ std::string AIClient::_http_post_request(
         warning("AI Assistant: API call to %s failed: %s\n", host.c_str(), e.what());
         return std::string("Error: API call failed. Details: ") + e.what();
     }
+}
+
+bool AIClient::is_available() const
+{
+    // This should be overridden by derived classes
+    return false;
 }
 
 std::string AIClient::_blocking_generate(const std::string& prompt_text, double temperature)
@@ -307,7 +348,7 @@ std::string AIClient::_blocking_generate(const std::string& prompt_text, double 
     auto headers = _get_api_headers();
     auto host = _get_api_host();
     auto path = _get_api_path(_model_name);
-    auto parser = [this](const json& jres) { return _parse_api_response(jres); };
+    auto parser = [this](const nlohmann::json& jres) { return _parse_api_response(jres); };
 
     return _http_post_request(host, path, headers, payload.dump(), parser);
 }
@@ -458,7 +499,7 @@ bool GeminiClient::is_available() const
 std::string GeminiClient::_get_api_host() const { return "https://generativelanguage.googleapis.com"; }
 std::string GeminiClient::_get_api_path(const std::string& model_name) const { return "/v1beta/models/" + model_name + ":generateContent?key=" + _settings.gemini_api_key; }
 httplib::Headers GeminiClient::_get_api_headers() const { return {}; }
-json GeminiClient::_get_api_payload(const std::string& prompt_text, double temperature) const
+nlohmann::json GeminiClient::_get_api_payload(const std::string& prompt_text, double temperature) const
 {
     return {
         {"contents", {{{"role", "user"}, {"parts", {{{"text", prompt_text}}}}}}},
@@ -466,7 +507,7 @@ json GeminiClient::_get_api_payload(const std::string& prompt_text, double tempe
     };
 }
 
-std::string GeminiClient::_parse_api_response(const json& jres) const
+std::string GeminiClient::_parse_api_response(const nlohmann::json& jres) const
 {
     if (jres.contains("error"))
     {
@@ -483,7 +524,7 @@ std::string GeminiClient::_parse_api_response(const json& jres) const
         return "Error: " + error_msg;
     }
 
-    const auto candidates = jres.value("candidates", json::array());
+    const auto candidates = jres.value("candidates", nlohmann::json::array());
     if (candidates.empty() || !candidates[0].is_object())
     {
         if (jres.contains("promptFeedback") && jres["promptFeedback"].contains("blockReason")) {
@@ -969,7 +1010,7 @@ AIClient::ConnectionTestResult AIClient::test_connection()
 
 std::unique_ptr<AIClient> get_ai_client(const settings_t& settings)
 {
-    qstring provider = ida_utils::qstring_tolower(settings.api_provider.c_str());
+        qstring provider = ida_utils::qstring_tolower(settings.api_provider.c_str());
 
     msg("AI Assistant: Initializing AI provider: %s\n", provider.c_str());
 
