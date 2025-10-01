@@ -69,9 +69,10 @@ public:
             return new_client;
         }
 
-        // Wait for an available client from any host (IDA SDK compatible)
+    // Wait for an available client from any host (IDA SDK compatible)
         while (_pool.empty() && _current_size >= _max_pool_size) {
-            _pool_cv.wait(lock);
+            // Use IDA SDK compatible wait - avoid macro conflict with parentheses
+            (_pool_cv).wait(lock);
         }
 
         // Try again to get a client
@@ -115,7 +116,7 @@ public:
         if (client->is_valid() && _current_size <= _max_pool_size) {
             // Try to return to host-specific pool first
             _host_pools[host].push(client);
-            _pool_cv.notify_one();
+            (_pool_cv).notify_one();
         } else {
             // Client is invalid or pool is full, stop and discard it
             client->stop();
