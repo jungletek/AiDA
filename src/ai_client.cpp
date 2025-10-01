@@ -4,7 +4,7 @@
 #include "constants.hpp"
 #include "connection_pool.hpp"
 #include "request_cache.hpp"
-#include "nlohmann/json.hpp"
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -474,7 +474,7 @@ std::string AIClient::_blocking_generate(const std::string& prompt_text, double 
     std::string request_body = payload.dump();
     auto cached_response = g_request_cache.get(host, path, request_body, _model_name);
     if (cached_response) {
-        DebugLogger::log_info("Cache hit for request to " + host + path);
+        DebugLogger::log_performance("Cache hit for request to " + host + path, 0);
         return *cached_response;
     }
 

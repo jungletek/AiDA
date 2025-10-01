@@ -1,5 +1,7 @@
 #pragma once
 
+#include <ida.hpp>
+
 namespace AiDAConstants {
 // Network timeouts
 static constexpr int CONNECTION_TIMEOUT_MS = 10000;

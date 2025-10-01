@@ -1,6 +1,7 @@
 #pragma once
 
 #include "constants.hpp"
+#include <httplib.h>
 #include <memory>
 #include <queue>
 #include <mutex>
