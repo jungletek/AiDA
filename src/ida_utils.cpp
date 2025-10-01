@@ -963,7 +963,7 @@ namespace ida_utils
         return get_func(func_vec[selected_idx]);
     }
     
-    qstring qstring_tolower(const qstring& s)
+    qstring qstring_tolower(const char* s)
     {
         qstring lower_s = s;
         qstrlwr(lower_s.begin());

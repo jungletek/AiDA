@@ -26,7 +26,7 @@ namespace ida_utils
     std::string format_prompt(const char* prompt_template, const nlohmann::json& context);
     bool is_word_char(char c);
     func_t* get_function_for_item(ea_t ea);
-    qstring qstring_tolower(const qstring& s);
+    qstring qstring_tolower(const char* s);
     bool get_address_from_line_pos(ea_t* out_ea, const char* line, int x);
     qstring apply_renames_from_ai(ea_t func_ea, const std::string& cpp_code);
 }

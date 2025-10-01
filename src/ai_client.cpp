@@ -1010,7 +1010,11 @@ AIClient::ConnectionTestResult AIClient::test_connection()
 
 std::unique_ptr<AIClient> get_ai_client(const settings_t& settings)
 {
-        qstring provider = ida_utils::qstring_tolower(settings.api_provider.c_str());
+    // Convert provider to lowercase directly
+    qstring provider;
+    const char* provider_cstr = settings.api_provider.c_str();
+    provider = provider_cstr;
+    qstrlwr(provider.begin());
 
     msg("AI Assistant: Initializing AI provider: %s\n", provider.c_str());
 
