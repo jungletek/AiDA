@@ -1,4 +1,5 @@
 #include "aida_pro.hpp"
+#include "debug_logger.hpp"
 using json = nlohmann::json;
 
 
@@ -129,6 +130,9 @@ void AIClient::cancel_current_request()
 
 void AIClient::_generate(const std::string& prompt_text, callback_t callback, double temperature, const qstring& request_type)
 {
+    DebugLogger::log_api_call(_model_name, "_generate");
+    DebugLogger::log_thread_state("Starting AI generation request");
+
     std::lock_guard<std::mutex> lock(_worker_thread_mutex);
     if (_worker_thread.joinable())
     {
@@ -147,23 +151,35 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
 
     auto worker_func = [this, prompt_text, temperature, req, validity_token = this->_validity_token]() {
         std::string result;
+        auto start_time = std::chrono::steady_clock::now();
+        
         try
         {
+            DebugLogger::log_thread_state("Worker thread started");
+            DebugLogger::log_memory_usage();
+            
             result = this->_blocking_generate(prompt_text, temperature);
+            
+            auto end_time = std::chrono::steady_clock::now();
+            auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+            DebugLogger::log_performance("_blocking_generate", duration.count());
         }
         catch (const std::exception& e)
         {
+            DebugLogger::log_error("Worker thread exception", e);
             result = "Error: Exception in worker thread: ";
             result += e.what();
             warning("AiDA: %s", result.c_str());
         }
         catch (...)
         {
+            DebugLogger::log_error("Worker thread unknown exception", std::runtime_error("Unknown exception"));
             result = "Error: Unknown exception in worker thread.";
             warning("AiDA: %s", result.c_str());
         }
 
         _task_done = true;
+        DebugLogger::log_thread_state("Worker thread completed");
 
         req->was_cancelled = _cancelled.load();
         if (!req->was_cancelled)
@@ -175,6 +191,7 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
     };
 
     _worker_thread = std::thread(worker_func);
+    DebugLogger::log_thread_state("Worker thread launched");
 }
 
 std::string AIClient::_http_post_request(
@@ -184,7 +201,12 @@ std::string AIClient::_http_post_request(
     const std::string& body,
     std::function<std::string(const json&)> response_parser)
 {
+    DebugLogger::log_api_call(_model_name, "_http_post_request");
+    DebugLogger::log_request(_model_name, host + path, body);
+    
     std::shared_ptr<httplib::Client> current_client;
+    auto start_time = std::chrono::steady_clock::now();
+    
     try
     {
         {
@@ -211,17 +233,25 @@ std::string AIClient::_http_post_request(
             _http_client.reset();
         }
 
+        auto end_time = std::chrono::steady_clock::now();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
+        DebugLogger::log_performance("HTTP Request", duration.count());
+
         if (_cancelled)
             return "Error: Operation cancelled.";
 
         if (!res)
         {
             auto err = res.error();
+            DebugLogger::log_error("HTTP request failed", std::runtime_error("HTTP error: " + httplib::to_string(err)));
             if (err == httplib::Error::Canceled) {
                 return "Error: Operation cancelled.";
             }
             return "Error: HTTP request failed: " + httplib::to_string(err);
         }
+        
+        DebugLogger::log_response(_model_name, host + path, res->body, res->status);
+
         if (res->status != 200)
         {
             qstring error_details = "No details in response body.";
@@ -248,6 +278,7 @@ std::string AIClient::_http_post_request(
             std::lock_guard<std::mutex> lock(_http_client_mutex);
             _http_client.reset();
         }
+        DebugLogger::log_error("HTTP request exception", e);
         warning("AI Assistant: API call to %s failed: %s\n", host.c_str(), e.what());
         return std::string("Error: API call failed. Details: ") + e.what();
     }
