@@ -1,5 +1,6 @@
 #include <Windows.h> // im sorry linux users idk what to do for you, if u have a solution make a PR and ill accept it
 #include "aida_pro.hpp"
+#include "string_utils.hpp"
 #include <set>
 
 namespace ida_utils
@@ -150,7 +151,7 @@ namespace ida_utils
         }
         result.append(text.c_str() + last_pos);
 
-        return result.c_str();
+        return string_utils::to_std(result);
     }
 
     static std::string truncate_string(const std::string& s, size_t max_len)
@@ -197,7 +198,7 @@ namespace ida_utils
         {
             qstring err;
             err.sprnt("// Error: Couldn't get function at 0x%a", ea);
-            return { err.c_str(), "Error" };
+            return { string_utils::to_std(err), "Error" };
         }
 
         text_t disasm_text;

@@ -1,5 +1,7 @@
 #include "aida_pro.hpp"
 #include "debug_logger.hpp"
+#include "string_utils.hpp"
+#include <nlohmann/json.hpp>
 
 using json = nlohmann::json;
 
@@ -285,10 +287,10 @@ std::string AIClient::_http_post_request(
                     if (res->body.size() > MAX_ERROR_RESPONSE_SIZE) {
                         error_details = "Response too large for parsing";
                     } else {
-                        error_details = json::parse(res->body).dump(2).c_str();
+                        error_details = nlohmann::json::parse(res->body).dump(2).c_str();
                     }
                 }
-                catch (const json::parse_error& e)
+                catch (const nlohmann::json::parse_error& e)
                 {
                     DebugLogger::log_error("JSON Parse Error in API Error", e);
                     error_details = res->body.c_str();
@@ -312,10 +314,10 @@ std::string AIClient::_http_post_request(
             return "Error: Response too large for processing";
         }
         
-        json jres;
+        nlohmann::json jres;
         try {
-            jres = json::parse(res->body);
-        } catch (const json::parse_error& e) {
+            jres = nlohmann::json::parse(res->body);
+        } catch (const nlohmann::json::parse_error& e) {
             DebugLogger::log_error("JSON Parse Error in Main Response", e);
             return "Error: Failed to parse API response: " + std::string(e.what());
         } catch (const std::exception& e) {
@@ -355,7 +357,7 @@ std::string AIClient::_blocking_generate(const std::string& prompt_text, double 
 
 void AIClient::analyze_function(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -368,7 +370,7 @@ void AIClient::analyze_function(ea_t ea, callback_t callback)
 
 void AIClient::suggest_name(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -380,7 +382,7 @@ void AIClient::suggest_name(ea_t ea, callback_t callback)
 
 void AIClient::generate_struct(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea, true);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea, true);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -392,7 +394,7 @@ void AIClient::generate_struct(ea_t ea, callback_t callback)
 
 void AIClient::generate_hook(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -400,7 +402,7 @@ void AIClient::generate_hook(ea_t ea, callback_t callback)
     }
     qstring q_func_name;
     get_func_name(&q_func_name, ea);
-    std::string func_name = q_func_name.c_str();
+    std::string func_name = string_utils::to_std(q_func_name);
     
     static const std::regex non_alnum_re("[^a-zA-Z0-9_]");
     std::string clean_func_name = std::regex_replace(func_name, non_alnum_re, "_");
@@ -413,7 +415,7 @@ void AIClient::generate_hook(ea_t ea, callback_t callback)
 
 void AIClient::generate_comment(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -425,7 +427,7 @@ void AIClient::generate_comment(ea_t ea, callback_t callback)
 
 void AIClient::custom_query(ea_t ea, const std::string& question, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -438,7 +440,7 @@ void AIClient::custom_query(ea_t ea, const std::string& question, callback_t cal
 
 void AIClient::locate_global_pointer(ea_t ea, const std::string& target_name, addr_callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea, false, 16000);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea, false, 16000);
     if (!context["ok"].get<bool>())
     {
         callback(BADADDR);
@@ -475,7 +477,7 @@ void AIClient::locate_global_pointer(ea_t ea, const std::string& target_name, ad
 
 void AIClient::rename_all(ea_t ea, callback_t callback)
 {
-    json context = ida_utils::get_context_for_prompt(ea, true);
+    nlohmann::json context = ida_utils::get_context_for_prompt(ea, true);
     if (!context["ok"].get<bool>())
     {
         callback(context["message"].get<std::string>());
@@ -545,14 +547,14 @@ std::string GeminiClient::_parse_api_response(const nlohmann::json& jres) const
         return "Error: API request finished unexpectedly. Reason: " + finish_reason;
     }
 
-    const auto content = first_candidate.value("content", json::object());
+    const auto content = first_candidate.value("content", nlohmann::json::object());
     if (!content.is_object())
     {
         msg("AiDA: Invalid Gemini API response: 'content' object is missing or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
         return "Error: Received invalid 'content' object from API.";
     }
 
-    const auto parts = content.value("parts", json::array());
+    const auto parts = content.value("parts", nlohmann::json::array());
     if (parts.empty() || !parts[0].is_object())
     {
         msg("AiDA: Invalid Gemini API response: 'parts' array is missing, empty, or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
@@ -581,7 +583,7 @@ httplib::Headers OpenAIClient::_get_api_headers() const
         {"Content-Type", "application/json"}
     };
 }
-json OpenAIClient::_get_api_payload(const std::string& prompt_text, double temperature) const
+nlohmann::json OpenAIClient::_get_api_payload(const std::string& prompt_text, double temperature) const
 {
     return {
         {"model", _model_name},
@@ -593,7 +595,7 @@ json OpenAIClient::_get_api_payload(const std::string& prompt_text, double tempe
     };
 }
 
-std::string OpenAIClient::_parse_api_response(const json& jres) const
+std::string OpenAIClient::_parse_api_response(const nlohmann::json& jres) const
 {
     if (jres.contains("error"))
     {
@@ -610,7 +612,7 @@ std::string OpenAIClient::_parse_api_response(const json& jres) const
         return "Error: " + error_msg;
     }
 
-    const auto choices = jres.value("choices", json::array());
+    const auto choices = jres.value("choices", nlohmann::json::array());
     if (choices.empty() || !choices[0].is_object())
     {
         if (jres.contains("promptFeedback") && jres["promptFeedback"].contains("blockReason")) {
@@ -631,7 +633,7 @@ std::string OpenAIClient::_parse_api_response(const json& jres) const
         return "Error: API request finished unexpectedly. Reason: " + finish_reason;
     }
 
-    const auto message = first_choice.value("message", json::object());
+    const auto message = first_choice.value("message", nlohmann::json::object());
     if (!message.is_object())
     {
         msg("AiDA: Invalid OpenAI API response: 'message' object is missing or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
@@ -685,7 +687,7 @@ httplib::Headers AnthropicClient::_get_api_headers() const
         {"Content-Type", "application/json"}
     };
 }
-json AnthropicClient::_get_api_payload(const std::string& prompt_text, double temperature) const
+nlohmann::json AnthropicClient::_get_api_payload(const std::string& prompt_text, double temperature) const
 {
     return {
         {"model", _model_name},
@@ -696,7 +698,7 @@ json AnthropicClient::_get_api_payload(const std::string& prompt_text, double te
     };
 }
 
-std::string AnthropicClient::_parse_api_response(const json& jres) const
+std::string AnthropicClient::_parse_api_response(const nlohmann::json& jres) const
 {
     if (jres.contains("error"))
     {
@@ -713,7 +715,7 @@ std::string AnthropicClient::_parse_api_response(const json& jres) const
         return "Error: " + error_msg;
     }
 
-    const auto content = jres.value("content", json::array());
+    const auto content = jres.value("content", nlohmann::json::array());
     if (content.empty() || !content[0].is_object())
     {
         if (jres.contains("promptFeedback") && jres["promptFeedback"].contains("blockReason")) {
@@ -750,7 +752,7 @@ bool CopilotClient::is_available() const
 std::string CopilotClient::_get_api_host() const { return _settings.copilot_proxy_address; }
 std::string CopilotClient::_get_api_path(const std::string&) const { return "/v1/chat/completions"; }
 httplib::Headers CopilotClient::_get_api_headers() const { return {{"Content-Type", "application/json"}}; }
-json CopilotClient::_get_api_payload(const std::string& prompt_text, double temperature) const
+nlohmann::json CopilotClient::_get_api_payload(const std::string& prompt_text, double temperature) const
 {
     return {
         {"model", _model_name},
@@ -761,7 +763,7 @@ json CopilotClient::_get_api_payload(const std::string& prompt_text, double temp
         {"temperature", temperature}
     };
 }
-std::string CopilotClient::_parse_api_response(const json& jres) const
+std::string CopilotClient::_parse_api_response(const nlohmann::json& jres) const
 {
     if (jres.contains("error"))
     {
@@ -778,7 +780,7 @@ std::string CopilotClient::_parse_api_response(const json& jres) const
         return "Error: " + error_msg;
     }
 
-    const auto choices = jres.value("choices", json::array());
+    const auto choices = jres.value("choices", nlohmann::json::array());
     if (choices.empty() || !choices[0].is_object())
     {
         if (jres.contains("promptFeedback") && jres["promptFeedback"].contains("blockReason")) {
@@ -799,7 +801,7 @@ std::string CopilotClient::_parse_api_response(const json& jres) const
         return "Error: API request finished unexpectedly. Reason: " + finish_reason;
     }
 
-    const auto message = first_choice.value("message", json::object());
+    const auto message = first_choice.value("message", nlohmann::json::object());
     if (!message.is_object())
     {
         msg("AiDA: Invalid Copilot API response: 'message' object is missing or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
@@ -856,7 +858,7 @@ std::string DeepSeekClient::_parse_api_response(const nlohmann::json& jres) cons
         return "Error: " + error_msg;
     }
 
-    const auto choices = jres.value("choices", json::array());
+    const auto choices = jres.value("choices", nlohmann::json::array());
     if (choices.empty() || !choices[0].is_object())
     {
         msg("AiDA: Invalid DeepSeek API response: 'choices' array is missing or empty.\nResponse body: %s\n", jres.dump(2).c_str());
@@ -872,7 +874,7 @@ std::string DeepSeekClient::_parse_api_response(const nlohmann::json& jres) cons
         return "Error: API request finished unexpectedly. Reason: " + finish_reason;
     }
 
-    const auto message = first_choice.value("message", json::object());
+    const auto message = first_choice.value("message", nlohmann::json::object());
     if (!message.is_object())
     {
         msg("AiDA: Invalid DeepSeek API response: 'message' object is missing or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
@@ -1010,10 +1012,8 @@ AIClient::ConnectionTestResult AIClient::test_connection()
 
 std::unique_ptr<AIClient> get_ai_client(const settings_t& settings)
 {
-    // Convert provider to lowercase directly
-    qstring provider;
-    const char* provider_cstr = settings.api_provider.c_str();
-    provider = provider_cstr;
+    // Convert provider to lowercase using our string conversion utilities
+    qstring provider = string_utils::to_qstring(settings.api_provider);
     qstrlwr(provider.begin());
 
     msg("AI Assistant: Initializing AI provider: %s\n", provider.c_str());

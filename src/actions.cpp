@@ -1,4 +1,5 @@
 #include "aida_pro.hpp"
+#include "string_utils.hpp"
 
 int idaapi action_handler::activate(action_activation_ctx_t* ctx)
 {
@@ -40,7 +41,7 @@ void handle_rename_function(action_activation_ctx_t* ctx, aida_plugin_t* plugin)
     const ea_t func_ea = pfn->start_ea;
 
     qstring current_name;
-    if (get_func_name(&current_name, func_ea) > 0 && is_uname(current_name.c_str()))
+    if (get_func_name(&current_name, func_ea) > 0 && is_uname(string_utils::to_std(current_name).c_str()))
     {
         qstring question;
         question.sprnt("HIDECANCEL\nThis function already has a user-defined name ('%s').\nDo you want to ask the AI for a new one anyway?", current_name.c_str());
@@ -60,7 +61,7 @@ void handle_rename_function(action_activation_ctx_t* ctx, aida_plugin_t* plugin)
                     return;
                 }
 
-                qstring clean_name = suggested_name.c_str();
+                qstring clean_name = string_utils::to_qstring(suggested_name);
                 clean_name.replace("`", "");
                 clean_name.replace("'", "");
                 clean_name.replace("\"", "");
@@ -113,7 +114,7 @@ void handle_auto_comment(action_activation_ctx_t* ctx, aida_plugin_t* plugin)
                     return;
                 }
 
-                qstring summary = content.c_str();
+                qstring summary = string_utils::to_qstring(content);
                 summary.replace("\n", " ");
                 summary.replace("\r", " ");
                 summary.replace("`", "");
