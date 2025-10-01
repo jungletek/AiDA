@@ -1,21 +1,58 @@
 #include "ida_interface.hpp"
 
-// IDA SDK headers - only included here to isolate from modern libraries
+// ============================================================================
+// IDA SDK Isolation Layer
+// All IDA SDK includes and definitions are contained here
+// This prevents IDA SDK macros from polluting the global namespace
+// ============================================================================
+
+// IDA SDK headers - ONLY included in this file to isolate from modern C++
+#define _IDA_SDK_ISOLATION_LAYER_
+
+// Temporarily disable IDA SDK macro redefinitions for this compilation unit
+#ifdef snprintf
+#undef snprintf
+#endif
+#ifdef vsnprintf
+#undef vsnprintf
+#endif
+#ifdef swprintf
+#undef swprintf
+#endif
+#ifdef vswprintf
+#undef vswprintf
+#endif
+
+// Include IDA SDK headers with isolation
+extern "C" {
 #include <ida.hpp>
 #include <kernwin.hpp>
 #include <funcs.hpp>
 #include <name.hpp>
 #include <xref.hpp>
 #include <struct.hpp>
-// IDA SDK compatibility fix for missing struct.hpp
-#ifndef HAVE_STRUCT_HPP
-// Define minimal struct functionality if header is missing
-typedef struct _struc_t struc_t;
-#endif
 #include <typeinf.hpp>
 #include <nalt.hpp>
 #include <bytes.hpp>
 #include <auto.hpp>
+}
+
+// Restore standard library functions after IDA SDK includes
+#ifdef ida_snprintf
+#define snprintf ida_snprintf
+#endif
+#ifdef ida_vsnprintf
+#define vsnprintf ida_vsnprintf
+#endif
+#ifdef ida_swprintf
+#define swprintf ida_swprintf
+#endif
+#ifdef ida_vswprintf
+#define vswprintf ida_vswprintf
+#endif
+
+// End IDA SDK isolation
+#undef _IDA_SDK_ISOLATION_LAYER_
 
 #include <sstream>
 #include <regex>
@@ -30,9 +67,12 @@ public:
 
     ~Impl() = default;
 
-    // Type conversion helpers
-    std::string qstring_to_std(const qstring& qs) const {
-        return std::string(qs.c_str());
+    // Type conversion helpers - IDA SDK qstring is a typedef to int
+    std::string qstring_to_std(qstring qs) const {
+        // qstring is actually a typedef to int in IDA SDK
+        // We need to use IDA SDK functions to convert
+        const char* cstr = qs.c_str();
+        return cstr ? std::string(cstr) : std::string();
     }
 
     qstring std_to_qstring(const std::string& s) const {
@@ -48,8 +88,15 @@ public:
 
         FunctionInfo info;
         info.address = static_cast<Address>(func->start_ea);
-        info.name = qstring_to_std(get_func_name(func->start_ea));
-        info.demangled_name = qstring_to_std(get_demangled_name(func->start_ea));
+        qstring func_name;
+        get_func_name(&func_name, func->start_ea);
+        info.name = qstring_to_std(func_name);
+
+        // Get demangled name properly
+        qstring demangled_name;
+        get_demangled_name(&demangled_name, func->start_ea, 0, 0, 0);
+        info.demangled_name = qstring_to_std(demangled_name);
+
         info.size = static_cast<size_t>(func->end_ea - func->start_ea);
 
         return info;
@@ -60,8 +107,10 @@ public:
 
         // This is a simplified implementation
         // In practice, you'd need to iterate through all functions
-        for (ea_t ea = get_next_func(0); ea != BADADDR; ea = get_next_func(ea)) {
-            qstring func_name = get_func_name(ea);
+        ea_t ea = 0;
+        while ((ea = get_next_func(ea)) != BADADDR) {
+            qstring func_name;
+            get_func_name(&func_name, ea);
             std::string name = qstring_to_std(func_name);
 
             if (name.find(name_pattern) != std::string::npos) {
@@ -95,7 +144,9 @@ public:
     }
 
     std::string get_function_name(ea_t address) const {
-        return qstring_to_std(get_func_name(address));
+        qstring func_name;
+        get_func_name(&func_name, address);
+        return qstring_to_std(func_name);
     }
 
     bool set_function_name(ea_t address, const std::string& name) {
@@ -104,11 +155,13 @@ public:
     }
 
     std::string get_comment(ea_t address) const {
-        return qstring_to_std(get_cmt(address));
+        qstring comment;
+        get_cmt(&comment, address);
+        return qstring_to_std(comment);
     }
 
-    bool set_comment(ea_t address, const std::string& comment) {
-        qstring qcomment = std_to_qstring(comment);
+    bool set_comment(ea_t address, const std::string& comment_text) {
+        qstring qcomment = std_to_qstring(comment_text);
         return set_cmt(address, qcomment.c_str(), false);
     }
 
@@ -128,12 +181,14 @@ public:
 
     Address get_function_start(ea_t address) const {
         func_t* func = get_func(address);
-        return func ? static_cast<Address>(func->start_ea) : 0;
+        if (!func) return 0;
+        return static_cast<Address>(func->start_ea);
     }
 
     Address get_function_end(ea_t address) const {
         func_t* func = get_func(address);
-        return func ? static_cast<Address>(func->end_ea) : 0;
+        if (!func) return 0;
+        return static_cast<Address>(func->end_ea);
     }
 };
 
