@@ -1023,16 +1023,37 @@ namespace ida_utils
     bool set_clipboard_text(const qstring& text)
     {
         // im sorry linux users idk what to do for you, if u have a solution make a PR and ill accept it
-        if (!OpenClipboard(nullptr))
+
+        // RAII wrapper for clipboard operations to ensure proper cleanup
+        struct ClipboardManager
         {
-            warning("AiDA: Could not open clipboard.");
+            bool opened = false;
+
+            ClipboardManager()
+            {
+                opened = OpenClipboard(nullptr);
+                if (!opened)
+                {
+                    warning("AiDA: Could not open clipboard.");
+                }
+            }
+
+            ~ClipboardManager()
+            {
+                if (opened)
+                {
+                    CloseClipboard();
+                }
+            }
+
+            bool is_valid() const { return opened; }
+        };
+
+        ClipboardManager clipboard;
+        if (!clipboard.is_valid())
+        {
             return false;
         }
-
-        struct clipboard_closer_t
-        {
-            ~clipboard_closer_t() { CloseClipboard(); }
-        } closer;
 
         if (!EmptyClipboard())
         {
@@ -1055,11 +1076,31 @@ namespace ida_utils
             return false;
         }
 
+        // RAII wrapper for memory management
+        struct MemoryManager
+        {
+            HGLOBAL hg = nullptr;
+            bool should_free = true;
+
+            explicit MemoryManager(HGLOBAL h) : hg(h) {}
+
+            ~MemoryManager()
+            {
+                if (should_free && hg)
+                {
+                    GlobalFree(hg);
+                }
+            }
+
+            void release() { should_free = false; }
+        };
+
+        MemoryManager mem_manager(hg);
+
         wchar16_t* locked_mem = (wchar16_t*)GlobalLock(hg);
         if (locked_mem == nullptr)
         {
             warning("AiDA: GlobalLock failed for clipboard.");
-            GlobalFree(hg);
             return false;
         }
 
@@ -1069,10 +1110,11 @@ namespace ida_utils
         if (SetClipboardData(CF_UNICODETEXT, hg) == nullptr)
         {
             warning("AiDA: SetClipboardData failed.");
-            GlobalFree(hg);
             return false;
         }
 
+        // Success - don't free the memory as Windows now owns it
+        mem_manager.release();
         return true;
     }
 

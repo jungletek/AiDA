@@ -1,9 +1,77 @@
 #include "aida_pro.hpp"
 #include "debug_logger.hpp"
 #include "string_utils.hpp"
-#include <nlohmann/json.hpp>
+#include "constants.hpp"
+#include "connection_pool.hpp"
+#include "request_cache.hpp"
+#include "nlohmann/json.hpp"
 
 using json = nlohmann::json;
+
+// Custom exception types for retry logic
+class NetworkError : public std::runtime_error {
+public:
+    NetworkError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+class APIError : public std::runtime_error {
+public:
+    APIError(const std::string& msg) : std::runtime_error(msg) {}
+};
+
+// Retry manager with exponential backoff
+class RetryManager {
+private:
+    static constexpr int DEFAULT_MAX_RETRIES = 3;
+    static constexpr int INITIAL_DELAY_MS = 1000;
+    static constexpr int MAX_DELAY_MS = 30000; // 30 seconds
+
+public:
+    static std::string make_request_with_retry(
+        std::function<std::string()> request_func,
+        int max_retries = DEFAULT_MAX_RETRIES) {
+
+        int delay_ms = INITIAL_DELAY_MS;
+
+        for (int attempt = 0; attempt <= max_retries; ++attempt) {
+            try {
+                return request_func();
+            } catch (const NetworkError& e) {
+                if (attempt == max_retries) {
+                    DebugLogger::log_error("Max retries exceeded", e);
+                    throw;
+                }
+
+                DebugLogger::log_error("Network request failed, retrying",
+                    std::runtime_error("Attempt " + std::to_string(attempt + 1) + ": " + e.what()));
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+                delay_ms = std::min(delay_ms * 2, MAX_DELAY_MS);  // Exponential backoff with cap
+            } catch (const APIError& e) {
+                // Don't retry on API errors (4xx, 5xx) unless they're rate limits
+                if (attempt == max_retries) {
+                    DebugLogger::log_error("API error after max retries", e);
+                    throw;
+                }
+
+                std::string error_msg = e.what();
+                if (error_msg.find("429") != std::string::npos ||
+                    error_msg.find("rate limit") != std::string::npos) {
+                    // Retry on rate limits
+                    DebugLogger::log_error("Rate limit hit, retrying",
+                        std::runtime_error("Attempt " + std::to_string(attempt + 1)));
+
+                    std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+                    delay_ms = std::min(delay_ms * 2, MAX_DELAY_MS);
+                } else {
+                    // Don't retry other API errors
+                    throw;
+                }
+            }
+        }
+        throw std::runtime_error("Unexpected error in retry logic");
+    }
+};
 
 // RAII wrapper for HTTP client to ensure proper cleanup
 class HTTPClientRAII {
@@ -157,10 +225,18 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
     DebugLogger::log_api_call(_model_name, "_generate");
     DebugLogger::log_thread_state("Starting AI generation request");
 
-    std::lock_guard<std::mutex> lock(_worker_thread_mutex);
+    // Use unique_lock for more flexibility and prevent deadlocks
+    std::unique_lock<std::mutex> lock(_worker_thread_mutex);
+
+    // Wait for any existing worker thread to complete safely
     if (_worker_thread.joinable())
     {
-        _worker_thread.join();
+        // Use condition variable to wait safely instead of blocking join
+        _task_done.wait(lock, [this]() { return _task_done.load(); });
+        if (_worker_thread.joinable())
+        {
+            _worker_thread.join();
+        }
     }
 
     _cancelled = false;
@@ -176,14 +252,14 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
     auto worker_func = [this, prompt_text, temperature, req, validity_token = this->_validity_token]() {
         std::string result;
         auto start_time = std::chrono::steady_clock::now();
-        
+
         try
         {
             DebugLogger::log_thread_state("Worker thread started");
             DebugLogger::log_memory_usage();
-            
+
             result = this->_blocking_generate(prompt_text, temperature);
-            
+
             auto end_time = std::chrono::steady_clock::now();
             auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time);
             DebugLogger::log_performance("_blocking_generate", duration.count());
@@ -241,8 +317,8 @@ std::string AIClient::_http_post_request(
     try
     {
         current_client->set_default_headers(headers);
-        current_client->set_read_timeout(600); // 10 minutes
-        current_client->set_connection_timeout(10);
+        current_client->set_read_timeout(AiDAConstants::READ_TIMEOUT_MS / 1000); // Convert to seconds
+        current_client->set_connection_timeout(AiDAConstants::CONNECTION_TIMEOUT_MS / 1000);
 
         auto res = current_client->Post(
             path.c_str(),
@@ -298,7 +374,7 @@ std::string AIClient::_http_post_request(
                 catch (const std::exception& e)
                 {
                     DebugLogger::log_error("Exception in API Error parsing", e);
-                    error_details = "Error parsing response: " + std::string(e.what());
+                    error_details = string_utils::to_qstring("Error parsing response: " + std::string(e.what()));
                 }
             }
             msg("AiDA: API Error. Host: %s, Status: %d\nResponse body: %s\n", host.c_str(), res->status, error_details.c_str());
@@ -341,10 +417,52 @@ bool AIClient::is_available() const
     return false;
 }
 
+// Rate limiter to prevent overwhelming APIs
+class RateLimiter {
+private:
+    std::mutex _mutex;
+    std::queue<std::chrono::steady_clock::time_point> _request_times;
+    int _max_requests_per_minute;
+
+public:
+    explicit RateLimiter(int max_requests_per_minute = 60)
+        : _max_requests_per_minute(max_requests_per_minute) {}
+
+    void wait_if_needed() {
+        std::lock_guard<std::mutex> lock(_mutex);
+        auto now = std::chrono::steady_clock::now();
+        auto one_minute_ago = now - std::chrono::minutes(1);
+
+        // Remove old requests outside the window
+        while (!_request_times.empty() && _request_times.front() < one_minute_ago) {
+            _request_times.pop();
+        }
+
+        // If we're at the limit, wait until we can make another request
+        if (_request_times.size() >= _max_requests_per_minute) {
+            auto wait_time = _request_times.front() + std::chrono::minutes(1) - now;
+            if (wait_time > std::chrono::steady_clock::duration::zero()) {
+                std::this_thread::sleep_for(wait_time);
+            }
+            // After waiting, remove the old request
+            _request_times.pop();
+        }
+
+        // Record this request
+        _request_times.push(now);
+    }
+};
+
+// Global rate limiter instance
+static RateLimiter g_rate_limiter(60); // 60 requests per minute default
+
 std::string AIClient::_blocking_generate(const std::string& prompt_text, double temperature)
 {
     if (!is_available())
         return "Error: AI client is not initialized. Check API key.";
+
+    // Apply rate limiting before making the request
+    g_rate_limiter.wait_if_needed();
 
     auto payload = _get_api_payload(prompt_text, temperature);
     auto headers = _get_api_headers();
@@ -352,7 +470,115 @@ std::string AIClient::_blocking_generate(const std::string& prompt_text, double 
     auto path = _get_api_path(_model_name);
     auto parser = [this](const nlohmann::json& jres) { return _parse_api_response(jres); };
 
-    return _http_post_request(host, path, headers, payload.dump(), parser);
+    // Check cache first
+    std::string request_body = payload.dump();
+    auto cached_response = g_request_cache.get(host, path, request_body, _model_name);
+    if (cached_response) {
+        DebugLogger::log_info("Cache hit for request to " + host + path);
+        return *cached_response;
+    }
+
+    // Wrap the HTTP request in retry logic with connection pooling
+    auto request_func = [&]() -> std::string {
+        // Use connection pool for better performance
+        auto client = g_connection_pool.acquire(host);
+
+        try {
+            client->set_default_headers(headers);
+            client->set_read_timeout(AiDAConstants::READ_TIMEOUT_MS / 1000);
+            client->set_connection_timeout(AiDAConstants::CONNECTION_TIMEOUT_MS / 1000);
+
+            auto res = client->Post(
+                path.c_str(),
+                request_body.c_str(),
+                request_body.length(),
+                "application/json",
+                [this](uint64_t, uint64_t) {
+                    return !_cancelled.load();
+                });
+
+            // Return client to pool
+            g_connection_pool.release(host, client);
+
+            if (_cancelled)
+                return "Error: Operation cancelled.";
+
+            if (!res) {
+                auto err = res.error();
+                std::string error_msg = "Error: HTTP request failed: " + httplib::to_string(err);
+                if (err == httplib::Error::Canceled) {
+                    error_msg = "Error: Operation cancelled.";
+                }
+                throw NetworkError(error_msg);
+            }
+
+            if (res->status != 200) {
+                std::string error_msg = "Error: API returned status " + std::to_string(res->status);
+                if (!res->body.empty()) {
+                    try {
+                        // Add bounds checking for JSON parsing
+                        const size_t MAX_ERROR_RESPONSE_SIZE = AiDAConstants::MAX_ERROR_RESPONSE_SIZE;
+                        if (res->body.size() > MAX_ERROR_RESPONSE_SIZE) {
+                            error_msg += " (Response too large for parsing)";
+                        } else {
+                            auto error_json = nlohmann::json::parse(res->body);
+                            error_msg += ": " + error_json.dump(2);
+                        }
+                    } catch (const nlohmann::json::parse_error&) {
+                        error_msg += ": " + res->body;
+                    }
+                }
+                throw APIError(error_msg);
+            }
+
+            // Add comprehensive bounds checking for main response parsing
+            const size_t MAX_RESPONSE_SIZE = AiDAConstants::MAX_RESPONSE_SIZE;
+            if (res->body.size() > MAX_RESPONSE_SIZE) {
+                throw APIError("Error: Response too large for processing");
+            }
+
+            nlohmann::json jres;
+            try {
+                jres = nlohmann::json::parse(res->body);
+            } catch (const nlohmann::json::parse_error& e) {
+                throw APIError("Error: Failed to parse API response: " + std::string(e.what()));
+            } catch (const std::exception& e) {
+                throw APIError("Error: Exception parsing API response: " + std::string(e.what()));
+            }
+
+            return parser(jres);
+        } catch (const std::exception& e) {
+            // Return client to pool even on error
+            g_connection_pool.release(host, client);
+            throw;
+        } catch (...) {
+            // Return client to pool even on unknown error
+            g_connection_pool.release(host, client);
+            throw;
+        }
+    };
+
+    try {
+        std::string result = RetryManager::make_request_with_retry(request_func, AiDAConstants::MAX_RETRIES);
+
+        // Cache successful responses (but not errors)
+        if (result.find("Error:") == std::string::npos) {
+            g_request_cache.put(host, path, request_body, _model_name, result, false);
+        } else {
+            // Cache rate limit errors for shorter duration
+            if (result.find("429") != std::string::npos || result.find("rate limit") != std::string::npos) {
+                g_request_cache.put(host, path, request_body, _model_name, result, true);
+            }
+        }
+
+        return result;
+    } catch (const NetworkError& e) {
+        return std::string("Error: Network request failed after retries: ") + e.what();
+    } catch (const APIError& e) {
+        return std::string("Error: API error after retries: ") + e.what();
+    } catch (const std::exception& e) {
+        return std::string("Error: Unexpected error after retries: ") + e.what();
+    }
 }
 
 void AIClient::analyze_function(ea_t ea, callback_t callback)

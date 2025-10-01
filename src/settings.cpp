@@ -408,11 +408,44 @@ void settings_t::prompt_for_api_key()
     question.sprnt("Please enter your %s API key to continue:", provider_name.c_str());
     if (ask_str(&key, HIST_SRCH, question.c_str()))
     {
-        if (provider == "gemini") gemini_api_key = key.c_str();
-        else if (provider == "openai") openai_api_key = key.c_str();
-        else if (provider == "openrouter") openrouter_api_key = key.c_str();
-        else if (provider == "anthropic") anthropic_api_key = key.c_str();
-        else if (provider == "deepseek") deepseek_api_key = key.c_str();
+        // Validate the API key before storing
+        std::string key_str = key.c_str();
+        if (key_str.empty())
+        {
+            warning("AI Assistant: API key cannot be empty.");
+            return;
+        }
+
+        if (key_str.length() < 10)
+        {
+            warning("AI Assistant: API key appears to be too short. Please verify it is correct.");
+        }
+
+        // Provider-specific validation
+        if (provider == "gemini" && !key_str.starts_with("AIza"))
+        {
+            warning("AI Assistant: Gemini API keys should start with 'AIza'. Please verify your key.");
+        }
+        else if (provider == "openai" && !key_str.starts_with("sk-"))
+        {
+            warning("AI Assistant: OpenAI API keys should start with 'sk-'. Please verify your key.");
+        }
+        else if (provider == "anthropic" && !key_str.starts_with("sk-ant-api"))
+        {
+            warning("AI Assistant: Anthropic API keys should start with 'sk-ant-api'. Please verify your key.");
+        }
+        else if (provider == "deepseek" && !key_str.starts_with("sk-"))
+        {
+            warning("AI Assistant: DeepSeek API keys should start with 'sk-'. Please verify your key.");
+        }
+
+        // Store the validated key
+        if (provider == "gemini") gemini_api_key = key_str;
+        else if (provider == "openai") openai_api_key = key_str;
+        else if (provider == "openrouter") openrouter_api_key = key_str;
+        else if (provider == "anthropic") anthropic_api_key = key_str;
+        else if (provider == "deepseek") deepseek_api_key = key_str;
+
         save();
     }
     else
