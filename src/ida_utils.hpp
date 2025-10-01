@@ -5,7 +5,7 @@
 
 #include <ida.hpp>
 #include <typeinf.hpp>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 
 struct settings_t;
 

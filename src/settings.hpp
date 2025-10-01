@@ -2,7 +2,7 @@
 
 #include <string>
 #include <vector>
-#include <nlohmann/json.hpp>
+#include "json.hpp"
 
 class aida_plugin_t;
 
@@ -26,6 +26,9 @@ public:
     std::string copilot_proxy_address;
     std::string copilot_model_name;
 
+    std::string deepseek_api_key;
+    std::string deepseek_model_name;
+
     int xref_context_count;
     int xref_analysis_depth;
     int xref_code_snippet_lines;
@@ -36,11 +39,14 @@ public:
     int max_root_func_candidates;
     double temperature;
 
+    bool debug_mode;
+
     static const std::vector<std::string> gemini_models;
     static const std::vector<std::string> openai_models;
     static const std::vector<std::string> openrouter_models;
     static const std::vector<std::string> anthropic_models;
     static const std::vector<std::string> copilot_models;
+    static const std::vector<std::string> deepseek_models;
 
     settings_t();
     void save();

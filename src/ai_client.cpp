@@ -723,6 +723,205 @@ std::string CopilotClient::_parse_api_response(const json& jres) const
     return message.value("content", "Error: 'content' field not found in API response.");
 }
 
+DeepSeekClient::DeepSeekClient(const settings_t& settings) : AIClient(settings)
+{
+    _model_name = _settings.deepseek_model_name;
+}
+
+bool DeepSeekClient::is_available() const
+{
+    return !_settings.deepseek_api_key.empty();
+}
+
+std::string DeepSeekClient::_get_api_host() const { return "https://api.deepseek.com"; }
+std::string DeepSeekClient::_get_api_path(const std::string&) const { return "/v1/chat/completions"; }
+httplib::Headers DeepSeekClient::_get_api_headers() const
+{
+    return {
+        {"Authorization", "Bearer " + _settings.deepseek_api_key},
+        {"Content-Type", "application/json"}
+    };
+}
+nlohmann::json DeepSeekClient::_get_api_payload(const std::string& prompt_text, double temperature) const
+{
+    return {
+        {"model", _model_name},
+        {"messages", {
+            {{"role", "system"}, {"content", BASE_PROMPT}},
+            {{"role", "user"}, {"content", prompt_text}}
+        }},
+        {"temperature", temperature}
+    };
+}
+std::string DeepSeekClient::_parse_api_response(const nlohmann::json& jres) const
+{
+    if (jres.contains("error"))
+    {
+        std::string error_msg = "DeepSeek API Error: ";
+        if (jres["error"].is_object() && jres["error"].contains("message"))
+        {
+            error_msg += jres["error"]["message"].get<std::string>();
+        }
+        else
+        {
+            error_msg += jres.dump(2);
+        }
+        msg("AiDA: %s\n", error_msg.c_str());
+        return "Error: " + error_msg;
+    }
+
+    const auto choices = jres.value("choices", json::array());
+    if (choices.empty() || !choices[0].is_object())
+    {
+        msg("AiDA: Invalid DeepSeek API response: 'choices' array is missing or empty.\nResponse body: %s\n", jres.dump(2).c_str());
+        return "Error: Received invalid 'choices' array from API.";
+    }
+
+    const auto& first_choice = choices[0];
+    std::string finish_reason = first_choice.value("finish_reason", "UNKNOWN");
+
+    if (finish_reason != "stop" && finish_reason != "STOP")
+    {
+        msg("AiDA: DeepSeek API returned a non-STOP finish reason: %s\n", finish_reason.c_str());
+        return "Error: API request finished unexpectedly. Reason: " + finish_reason;
+    }
+
+    const auto message = first_choice.value("message", json::object());
+    if (!message.is_object())
+    {
+        msg("AiDA: Invalid DeepSeek API response: 'message' object is missing or invalid.\nResponse body: %s\n", jres.dump(2).c_str());
+        return "Error: Received invalid 'message' object from API.";
+    }
+
+    return message.value("content", "Error: 'content' field not found in API response.");
+}
+
+AIClient::ConnectionTestResult AIClient::test_connection()
+{
+    ConnectionTestResult result;
+    result.success = false;
+    result.response_time_ms = 0;
+    
+    if (!is_available())
+    {
+        result.message = "Error: AI client is not available. Check API key configuration.";
+        result.details = "The API key appears to be empty or invalid.";
+        return result;
+    }
+
+    auto start_time = std::chrono::steady_clock::now();
+
+    try
+    {
+        // Create a minimal test prompt
+        std::string test_prompt = "Respond with only the word 'OK' and nothing else.";
+        
+        // Use the existing HTTP infrastructure but with a shorter timeout
+        auto headers = _get_api_headers();
+        auto host = _get_api_host();
+        auto path = _get_api_path(_model_name);
+        auto payload = _get_api_payload(test_prompt, 0.0);
+        
+        // Create a test-specific response parser
+        auto test_parser = [this](const nlohmann::json& jres) -> std::string {
+            std::string response = _parse_api_response(jres);
+            if (response.find("Error:") != std::string::npos)
+            {
+                return response;
+            }
+            
+            // Check if response contains "OK" (case insensitive)
+            std::string response_lower = response;
+            std::transform(response_lower.begin(), response_lower.end(), response_lower.begin(), ::tolower);
+            if (response_lower.find("ok") != std::string::npos)
+            {
+                return "OK";
+            }
+            
+            return "Error: Unexpected response format: " + response;
+        };
+
+        // Create a temporary HTTP client with shorter timeouts for testing
+        std::shared_ptr<httplib::Client> test_client;
+        {
+            std::lock_guard<std::mutex> lock(_http_client_mutex);
+            test_client = std::make_shared<httplib::Client>(host.c_str());
+        }
+
+        test_client->set_default_headers(headers);
+        test_client->set_read_timeout(30); // 30 seconds for test
+        test_client->set_connection_timeout(10); // 10 seconds connection timeout
+
+        auto res = test_client->Post(
+            path.c_str(),
+            payload.dump().c_str(),
+            payload.dump().length(),
+            "application/json");
+
+        auto end_time = std::chrono::steady_clock::now();
+        result.response_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+
+        if (!res)
+        {
+            auto err = res.error();
+            result.message = "Error: HTTP request failed";
+            result.details = "Network error: " + httplib::to_string(err);
+            return result;
+        }
+
+        if (res->status != 200)
+        {
+            result.message = "Error: API returned non-200 status";
+            result.details = "HTTP Status: " + std::to_string(res->status);
+            if (!res->body.empty())
+            {
+                try
+                {
+                    auto error_json = nlohmann::json::parse(res->body);
+                    result.details += "\nResponse: " + error_json.dump(2);
+                }
+                catch (const nlohmann::json::parse_error&)
+                {
+                    result.details += "\nResponse body: " + res->body;
+                }
+            }
+            return result;
+        }
+
+        // Parse the response
+        auto jres = nlohmann::json::parse(res->body);
+        std::string test_result = test_parser(jres);
+
+        if (test_result == "OK")
+        {
+            result.success = true;
+            result.message = "Connection successful";
+            result.details = "API responded correctly in " + std::to_string(result.response_time_ms) + "ms";
+        }
+        else
+        {
+            result.message = "Error: API response validation failed";
+            result.details = test_result;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        auto end_time = std::chrono::steady_clock::now();
+        result.response_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        result.message = "Error: Exception during connection test";
+        result.details = std::string("Exception: ") + e.what();
+    }
+    catch (...)
+    {
+        auto end_time = std::chrono::steady_clock::now();
+        result.response_time_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
+        result.message = "Error: Unknown exception during connection test";
+        result.details = "Unknown exception occurred";
+    }
+
+    return result;
+}
+
 std::unique_ptr<AIClient> get_ai_client(const settings_t& settings)
 {
     qstring provider = ida_utils::qstring_tolower(settings.api_provider.c_str());
@@ -748,6 +947,10 @@ std::unique_ptr<AIClient> get_ai_client(const settings_t& settings)
     else if (provider == "copilot")
     {
         return std::make_unique<CopilotClient>(settings);
+    }
+    else if (provider == "deepseek")
+    {
+        return std::make_unique<DeepSeekClient>(settings);
     }
     else
     {

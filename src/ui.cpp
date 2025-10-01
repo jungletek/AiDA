@@ -95,6 +95,7 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
     static const char form_str[] =
         "STARTITEM 0\n"
         "BUTTON YES Ok\n"
+        "BUTTON NO \"Test Connection\"\n"
         "BUTTON CANCEL Cancel\n"
         "AI Assistant Settings\n\n"
         // --- general tab ---
@@ -130,9 +131,14 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
         // --- copilot ---
         "<Proxy Address:q41:64:64::>\n"
         "<Model Name:b42:0:40::>\n"
-        "<=:Copilot>100>\n";
+        "<=:Copilot>100>\n"
 
-    static const char* const providers_list_items[] = { "Gemini", "OpenAI", "OpenRouter", "Anthropic", "Copilot" };
+        // --- deepseek ---
+        "<API Key:q51:64:64::>\n"
+        "<Model Name:b52:0:40::>\n"
+        "<=:DeepSeek>100>\n";
+
+    static const char* const providers_list_items[] = { "Gemini", "OpenAI", "OpenRouter", "Anthropic", "Copilot", "DeepSeek" };
     qstrvec_t providers_qstrvec;
     for (const auto& p : providers_list_items)
         providers_qstrvec.push_back(p);
@@ -144,6 +150,7 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
     else if (provider_setting == "openrouter") provider_idx = 2;
     else if (provider_setting == "anthropic") provider_idx = 3;
     else if (provider_setting == "copilot") provider_idx = 4;
+    else if (provider_setting == "deepseek") provider_idx = 5;
 
     auto find_model_index = [](const std::vector<std::string>& models, const std::string& name) -> int {
         auto it = std::find(models.begin(), models.end(), name);
@@ -179,11 +186,16 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
     for (const auto& m : settings_t::copilot_models) copilot_models_qsv.push_back(m.c_str());
     int copilot_model_idx = find_model_index(settings_t::copilot_models, g_settings.copilot_model_name);
 
+    qstrvec_t deepseek_models_qsv;
+    for (const auto& m : settings_t::deepseek_models) deepseek_models_qsv.push_back(m.c_str());
+    int deepseek_model_idx = find_model_index(settings_t::deepseek_models, g_settings.deepseek_model_name);
+
     qstring gemini_key = g_settings.gemini_api_key.c_str();
     qstring openai_key = g_settings.openai_api_key.c_str();
     qstring openrouter_key = g_settings.openrouter_api_key.c_str();
     qstring anthropic_key = g_settings.anthropic_api_key.c_str();
     qstring copilot_proxy_addr = g_settings.copilot_proxy_address.c_str();
+    qstring deepseek_key = g_settings.deepseek_api_key.c_str();
     qstring bulk_delay_str;
     bulk_delay_str.sprnt("%.2f", g_settings.bulk_processing_delay);
     qstring temp_str;
@@ -196,7 +208,7 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
 
     int selected_tab = 0;
 
-    if (ask_form(form_str,
+    int result = ask_form(form_str,
         // general tab (8 args)
         &providers_qstrvec, &provider_idx,
         &xref_count, &xref_depth, &snippet_lines,
@@ -211,12 +223,15 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
         &anthropic_key, &anthropic_models_qsv, &anthropic_model_idx,
         // copilot tab (3 args)
         &copilot_proxy_addr, &copilot_models_qsv, &copilot_model_idx,
+        // deepseek tab (3 args)
+        &deepseek_key, &deepseek_models_qsv, &deepseek_model_idx,
         // tab control (1 arg)
         &selected_tab
-    ) > 0)
+    );
+
+    if (result == 1) // OK button
     {
         g_settings.api_provider = providers_list_items[provider_idx];
-
 
         g_settings.gemini_api_key = gemini_key.c_str();
         if (gemini_model_idx < settings_t::gemini_models.size())
@@ -238,6 +253,10 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
         if (copilot_model_idx < settings_t::copilot_models.size())
             g_settings.copilot_model_name = settings_t::copilot_models[copilot_model_idx];
 
+        g_settings.deepseek_api_key = deepseek_key.c_str();
+        if (deepseek_model_idx < settings_t::deepseek_models.size())
+            g_settings.deepseek_model_name = settings_t::deepseek_models[deepseek_model_idx];
+
         g_settings.xref_context_count = static_cast<int>(xref_count);
         g_settings.xref_analysis_depth = static_cast<int>(xref_depth);
         g_settings.xref_code_snippet_lines = static_cast<int>(snippet_lines);
@@ -255,6 +274,68 @@ void SettingsForm::show_and_apply(aida_plugin_t* plugin_instance)
         {
             msg("AI Assistant: Settings updated. Re-initializing AI client...\n");
             plugin_instance->reinit_ai_client();
+        }
+    }
+    else if (result == 0) // Test Connection button
+    {
+        // Create temporary settings with current form values
+        settings_t temp_settings = g_settings;
+        temp_settings.api_provider = providers_list_items[provider_idx];
+        temp_settings.gemini_api_key = gemini_key.c_str();
+        temp_settings.openai_api_key = openai_key.c_str();
+        temp_settings.openrouter_api_key = openrouter_key.c_str();
+        temp_settings.anthropic_api_key = anthropic_key.c_str();
+        temp_settings.copilot_proxy_address = copilot_proxy_addr.c_str();
+        temp_settings.deepseek_api_key = deepseek_key.c_str();
+        
+        if (gemini_model_idx < settings_t::gemini_models.size())
+            temp_settings.gemini_model_name = settings_t::gemini_models[gemini_model_idx];
+        if (openai_model_idx < openai_models_vec.size())
+            temp_settings.openai_model_name = openai_models_vec[openai_model_idx];
+        if (openrouter_model_idx < openrouter_models_vec.size())
+            temp_settings.openrouter_model_name = openrouter_models_vec[openrouter_model_idx];
+        if (anthropic_model_idx < settings_t::anthropic_models.size())
+            temp_settings.anthropic_model_name = settings_t::anthropic_models[anthropic_model_idx];
+        if (copilot_model_idx < settings_t::copilot_models.size())
+            temp_settings.copilot_model_name = settings_t::copilot_models[copilot_model_idx];
+        if (deepseek_model_idx < settings_t::deepseek_models.size())
+            temp_settings.deepseek_model_name = settings_t::deepseek_models[deepseek_model_idx];
+
+        // Test the connection
+        msg("AI Assistant: Testing connection to %s...\n", temp_settings.api_provider.c_str());
+        
+        auto client = get_ai_client(temp_settings);
+        if (!client)
+        {
+            warning("AI Assistant: Failed to create AI client for testing.");
+            return;
+        }
+
+        auto test_result = client->test_connection();
+        
+        if (test_result.success)
+        {
+            info("AI Assistant: Connection test SUCCESSFUL!\n"
+                 "Provider: %s\n"
+                 "Message: %s\n"
+                 "Details: %s\n"
+                 "Response time: %d ms",
+                 temp_settings.api_provider.c_str(),
+                 test_result.message.c_str(),
+                 test_result.details.c_str(),
+                 test_result.response_time_ms);
+        }
+        else
+        {
+            warning("AI Assistant: Connection test FAILED!\n"
+                    "Provider: %s\n"
+                    "Error: %s\n"
+                    "Details: %s\n"
+                    "Response time: %d ms",
+                    temp_settings.api_provider.c_str(),
+                    test_result.message.c_str(),
+                    test_result.details.c_str(),
+                    test_result.response_time_ms);
         }
     }
 }
@@ -290,8 +371,11 @@ void show_text_in_viewer(const char* title, const std::string& text_content)
         lines_ptr->push_back(simpleline_t(line.c_str()));
     }
 
+    // Initialize simpleline_place_t objects explicitly to avoid equality operator generation
     simpleline_place_t s1;
     simpleline_place_t s2;
+    memset(&s1, 0, sizeof(s1));
+    memset(&s2, 0, sizeof(s2));
     s2.n = lines_ptr->empty() ? 0 : static_cast<uint32>(lines_ptr->size() - 1);
 
     TWidget* viewer = create_custom_viewer(title, &s1, &s2, &s1, nullptr, lines_ptr, nullptr, nullptr);

@@ -100,6 +100,16 @@ const std::vector<std::string> settings_t::copilot_models = {
     "gpt-3.5-turbo-0613",
 };
 
+const std::vector<std::string> settings_t::deepseek_models = {
+    "deepseek-chat",
+    "deepseek-reasoner",
+    "deepseek-coder",
+    "deepseek-v2",
+    "deepseek-v2-lite",
+    "deepseek-llm-67b-chat",
+    "deepseek-llm-7b-chat"
+};
+
 // Replaced macro-based (strict) JSON mapping with tolerant serializers that keep defaults
 // when keys are missing, to preserve backward compatibility with older config files.
 static void to_json(nlohmann::json& j, const settings_t& s)
@@ -116,6 +126,8 @@ static void to_json(nlohmann::json& j, const settings_t& s)
         {"anthropic_model_name", s.anthropic_model_name},
         {"copilot_proxy_address", s.copilot_proxy_address},
         {"copilot_model_name", s.copilot_model_name},
+        {"deepseek_api_key", s.deepseek_api_key},
+        {"deepseek_model_name", s.deepseek_model_name},
         {"xref_context_count", s.xref_context_count},
         {"xref_analysis_depth", s.xref_analysis_depth},
         {"xref_code_snippet_lines", s.xref_code_snippet_lines},
@@ -123,7 +135,8 @@ static void to_json(nlohmann::json& j, const settings_t& s)
         {"max_prompt_tokens", s.max_prompt_tokens},
         {"max_root_func_scan_count", s.max_root_func_scan_count},
         {"max_root_func_candidates", s.max_root_func_candidates},
-        {"temperature", s.temperature}
+        {"temperature", s.temperature},
+        {"debug_mode", s.debug_mode}
     };
 }
 
@@ -152,6 +165,10 @@ static void from_json(const nlohmann::json& j, settings_t& s)
     s.copilot_proxy_address = j.value("copilot_proxy_address", d.copilot_proxy_address);
     s.copilot_model_name = j.value("copilot_model_name", d.copilot_model_name);
 
+    std::string deepseek_key = j.value("deepseek_api_key", d.deepseek_api_key);
+    s.deepseek_api_key = deepseek_key;
+    s.deepseek_model_name = j.value("deepseek_model_name", d.deepseek_model_name);
+
     s.xref_context_count = j.value("xref_context_count", d.xref_context_count);
     s.xref_analysis_depth = j.value("xref_analysis_depth", d.xref_analysis_depth);
     s.xref_code_snippet_lines = j.value("xref_code_snippet_lines", d.xref_code_snippet_lines);
@@ -163,6 +180,7 @@ static void from_json(const nlohmann::json& j, settings_t& s)
     s.max_root_func_candidates = j.value("max_root_func_candidates", d.max_root_func_candidates);
 
     s.temperature = j.value("temperature", d.temperature);
+    s.debug_mode = j.value("debug_mode", d.debug_mode);
 }
 
 static qstring get_config_file()
@@ -241,10 +259,12 @@ static bool load_settings_from_file(settings_t& settings, const qstring& path)
         req("openrouter_api_key"); req("openrouter_model_name");
         req("anthropic_api_key"); req("anthropic_model_name");
         req("copilot_proxy_address"); req("copilot_model_name");
+        req("deepseek_api_key"); req("deepseek_model_name");
         req("xref_context_count"); req("xref_analysis_depth"); req("xref_code_snippet_lines");
         req("bulk_processing_delay"); req("max_prompt_tokens");
         req("max_root_func_scan_count"); req("max_root_func_candidates");
         req("temperature");
+        req("debug_mode");
 
         settings = j.get<settings_t>();
 
@@ -275,6 +295,8 @@ settings_t::settings_t() :
     anthropic_model_name("claude-3.5-sonnet-latest"),
     copilot_proxy_address("http://127.0.0.1:4141"),
     copilot_model_name("gpt-4.1"),
+    deepseek_api_key(""),
+    deepseek_model_name("deepseek-chat"),
     xref_context_count(5),
     xref_analysis_depth(3),
     xref_code_snippet_lines(30),
@@ -282,7 +304,8 @@ settings_t::settings_t() :
     max_prompt_tokens(1048576),
     max_root_func_scan_count(40),
     max_root_func_candidates(40),
-    temperature(0.1)
+    temperature(0.1),
+    debug_mode(false)
 {
 }
 
@@ -314,6 +337,11 @@ void settings_t::load(aida_plugin_t* plugin_instance)
     if (anthropic_api_key.empty() && qgetenv("ANTHROPIC_API_KEY", &val))
     {
         anthropic_api_key = val.c_str();
+        has_env_keys = true;
+    }
+    if (deepseek_api_key.empty() && qgetenv("DEEPSEEK_API_KEY", &val))
+    {
+        deepseek_api_key = val.c_str();
         has_env_keys = true;
     }
 
@@ -355,6 +383,7 @@ std::string settings_t::get_active_api_key() const
     if (provider == "openrouter") return openrouter_api_key;
     if (provider == "anthropic") return anthropic_api_key;
     if (provider == "copilot") return copilot_proxy_address;
+    if (provider == "deepseek") return deepseek_api_key;
     return "";
 }
 
@@ -383,6 +412,7 @@ void settings_t::prompt_for_api_key()
         else if (provider == "openai") openai_api_key = key.c_str();
         else if (provider == "openrouter") openrouter_api_key = key.c_str();
         else if (provider == "anthropic") anthropic_api_key = key.c_str();
+        else if (provider == "deepseek") deepseek_api_key = key.c_str();
         save();
     }
     else

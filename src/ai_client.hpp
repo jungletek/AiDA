@@ -20,9 +20,17 @@ public:
     using callback_t = std::function<void(const std::string&)>;
     using addr_callback_t = std::function<void(ea_t)>;
 
+    struct ConnectionTestResult {
+        bool success;
+        std::string message;
+        std::string details;
+        int response_time_ms;
+    };
+
     virtual ~AIClientBase() = default;
 
     virtual bool is_available() const = 0;
+    virtual ConnectionTestResult test_connection() = 0;
     virtual void analyze_function(ea_t ea, callback_t callback) = 0;
     virtual void suggest_name(ea_t ea, callback_t callback) = 0;
     virtual void generate_struct(ea_t ea, callback_t callback) = 0;
@@ -47,6 +55,7 @@ public:
     void custom_query(ea_t ea, const std::string& question, callback_t callback) override;
     void locate_global_pointer(ea_t ea, const std::string& target_name, addr_callback_t callback) override;
     void rename_all(ea_t ea, callback_t callback) override;
+    ConnectionTestResult test_connection() override;
 
     void cancel_current_request();
 
@@ -142,6 +151,19 @@ class CopilotClient : public AIClient
 {
 public:
     CopilotClient(const settings_t& settings);
+    bool is_available() const override;
+protected:
+    std::string _get_api_host() const override;
+    std::string _get_api_path(const std::string& model_name) const override;
+    httplib::Headers _get_api_headers() const override;
+    nlohmann::json _get_api_payload(const std::string& prompt_text, double temperature) const override;
+    std::string _parse_api_response(const nlohmann::json& response) const override;
+};
+
+class DeepSeekClient : public AIClient
+{
+public:
+    DeepSeekClient(const settings_t& settings);
     bool is_available() const override;
 protected:
     std::string _get_api_host() const override;
