@@ -1,5 +1,7 @@
 #pragma once
 
+// IDA SDK headers for constants
+#include <name.hpp>  // For MAXNAMELEN
 #include <ida.hpp>
 
 namespace AiDAConstants {

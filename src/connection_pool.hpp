@@ -14,7 +14,7 @@
 class ConnectionPool {
 private:
     std::queue<std::shared_ptr<httplib::Client>> _pool;
-    std::mutex _pool_mutex;
+    mutable std::mutex _pool_mutex;  // ← Mutable for const method locking
     std::condition_variable _pool_cv;
     size_t _max_pool_size;
     size_t _current_size;

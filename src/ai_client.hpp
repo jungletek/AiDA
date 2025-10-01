@@ -174,4 +174,4 @@ protected:
     std::string _parse_api_response(const nlohmann::json& response) const override;
 };
 
-std::unique_ptr<AIClient> get_ai_client(const settings_t& settings);
+std::unique_ptr<UnifiedAIClient> get_ai_client(const settings_t& settings);

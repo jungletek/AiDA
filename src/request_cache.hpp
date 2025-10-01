@@ -20,7 +20,7 @@ private:
     };
 
     std::unordered_map<std::string, CacheEntry> _cache;
-    std::mutex _cache_mutex;
+    mutable std::mutex _cache_mutex;  // ← Mutable for const method locking
     std::chrono::minutes _default_ttl;
     size_t _max_cache_size;
 

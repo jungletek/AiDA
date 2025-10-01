@@ -1,8 +1,6 @@
 #include "unified_ai_client.hpp"
 #include "debug_logger.hpp"
-#include "ida_utils.hpp"
-#include <ida.hpp>
-#include <kernwin.hpp>
+#include "ida_interface.hpp"
 #include <httplib.h>
 #include <regex>
 #include <sstream>
