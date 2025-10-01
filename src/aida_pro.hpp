@@ -1,6 +1,6 @@
 #pragma once
 
-// Note: CPPHTTPLIB_OPENSSL_SUPPORT is defined in CMakeLists.txt and AiDA.vcxproj
+// Note: CPPHTTPLIB_OPENSSL_SUPPORT is defined in CMakeLists.txt and AiDA.vcxproj.bak
 #include "httplib.h"
 #include "json.hpp"
 
