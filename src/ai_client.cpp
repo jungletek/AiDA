@@ -225,7 +225,8 @@ void AIClient::_generate(const std::string& prompt_text, callback_t callback, do
     {
         // Use condition variable to wait safely instead of blocking join (IDA SDK compatible)
         while (!_task_done.load()) {
-            _task_done.wait(lock);
+            // Use IDA SDK compatible wait - avoid macro conflict
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         if (_worker_thread.joinable())
         {

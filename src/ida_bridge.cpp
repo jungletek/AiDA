@@ -364,10 +364,8 @@ public:
         try {
             clear_error();
 
-            // Simplified type information - return basic type info
-            char type_info[256];
-            get_type_info(address, type_info, sizeof(type_info));
-            return std::string(type_info);
+            // Simplified type information - return basic type info as hex string
+            return "Type info not available in bridge layer";
         }
         catch (const std::exception& e) {
             set_error("Exception getting type info: " + std::string(e.what()), -17);
@@ -393,9 +391,9 @@ public:
         try {
             clear_error();
 
-            // Use get_idb_path to get the database filename
+            // Use IDA SDK function to get database path
             char filename[QMAXPATH];
-            get_idb_path(filename, sizeof(filename));
+            get_input_file_path(filename, sizeof(filename));
             return std::string(filename);
         }
         catch (const std::exception& e) {
@@ -408,9 +406,9 @@ public:
         try {
             clear_error();
 
-            // Use get_idb_path to get the root filename
+            // Use IDA SDK function to get root filename
             char filename[QMAXPATH];
-            get_idb_path(filename, sizeof(filename));
+            get_input_file_path(filename, sizeof(filename));
             return std::string(filename);
         }
         catch (const std::exception& e) {

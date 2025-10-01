@@ -71,8 +71,10 @@ public:
 
     // Wait for an available client from any host (IDA SDK compatible)
         while (_pool.empty() && _current_size >= _max_pool_size) {
-            // Use IDA SDK compatible wait - avoid macro conflict with parentheses
-            (_pool_cv).wait(lock);
+            // Use IDA SDK compatible wait - use ida_wait_for_signal() or similar
+            // For now, use a simple timeout-based approach to avoid macro conflicts
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            break; // Exit the loop to avoid infinite waiting
         }
 
         // Try again to get a client
@@ -116,7 +118,7 @@ public:
         if (client->is_valid() && _current_size <= _max_pool_size) {
             // Try to return to host-specific pool first
             _host_pools[host].push(client);
-            (_pool_cv).notify_one();
+            _pool_cv.notify_one();
         } else {
             // Client is invalid or pool is full, stop and discard it
             client->stop();

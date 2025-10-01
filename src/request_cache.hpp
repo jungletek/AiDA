@@ -15,6 +15,8 @@ private:
         std::chrono::steady_clock::time_point timestamp;
         bool is_error; // Track if this is an error response to cache errors too
 
+        CacheEntry() = default;
+
         CacheEntry(std::string resp, bool error = false)
             : response(std::move(resp)), timestamp(std::chrono::steady_clock::now()), is_error(error) {}
     };
