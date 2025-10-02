@@ -39,6 +39,14 @@ public:
 
     ~UnifiedAIClient() override;
 
+    // Connection test result structure
+    struct ConnectionTestResult {
+        bool success;
+        std::string message;
+        std::string details;
+        int response_time_ms;
+    };
+
     // AIClientBase interface implementation (using standard C++ types)
     bool is_available() const override;
     ConnectionTestResult test_connection() override;

@@ -26,6 +26,17 @@
 #include <windows.h>
 #include <cstdarg>
 
+// Include standard library headers needed for third-party compatibility
+#include <string>
+#include <vector>
+#include <mutex>
+#include <condition_variable>
+#include <thread>
+#include <sstream>
+#include <iomanip>
+#include <atomic>
+#include <chrono>
+
 // ============================================================================
 // THIRD-PARTY LIBRARY INCLUDES
 // ============================================================================
@@ -72,10 +83,11 @@ namespace thirdparty_compat {
         return ss.str();
     }
 
-    // Type definitions for third-party libraries
-    using Client = httplib::Client;
-    using Headers = httplib::Headers;
-    using Result = httplib::Result;
+    // Type definitions for third-party libraries (forward declarations)
+    // These will be defined when httplib.h is included in source files
+    class Client;
+    using Headers = std::vector<std::pair<std::string, std::string>>;
+    class Result;
 
     // Standard library function wrappers to ensure consistency
     inline int safe_snprintf(char* buffer, size_t bufsz, const char* format, ...) {

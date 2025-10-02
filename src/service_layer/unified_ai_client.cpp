@@ -3,6 +3,7 @@
 #include "debug_logger.hpp"
 #include "settings.hpp"
 #include <nlohmann/json.hpp>
+#include <httplib.h>
 #include <regex>
 #include <sstream>
 #include <iomanip>
