@@ -2,13 +2,15 @@
 #include "unified_ai_client.hpp"
 #include "debug_logger.hpp"
 #include "ida_interface.hpp"
+#include "ida_utils.hpp"
+#include "settings.hpp"
 #include <regex>
 #include <sstream>
 #include <iomanip>
 
 // Initialize global instances
 ConnectionPool g_connection_pool;
-RequestCache g_request_cache(30min);  // 30 minute cache TTL
+RequestCache g_request_cache(thirdparty_compat::minutes(30), 1000);  // 30 minute cache TTL
 
 // UnifiedAIClient implementation
 UnifiedAIClient::UnifiedAIClient(const AIProviderConfig& config,
@@ -34,7 +36,7 @@ UnifiedAIClient::~UnifiedAIClient() {
     cancel_current_request();
 
     {
-        std::lock_guard<std::mutex> lock(_worker_mutex);
+        std::lock_guard<thirdparty_compat::mutex> lock(_worker_mutex);
         _should_stop = true;
         _worker_cv.notify_one();
     }
@@ -86,7 +88,7 @@ UnifiedAIClient::ConnectionTestResult UnifiedAIClient::test_connection() {
         }
 
         // Build headers
-        httplib::Headers headers = _config.default_headers;
+        thirdparty_compat::Headers headers = _config.default_headers;
         std::string auth_header = _config.get_auth_header(_config.auth_prefix);
         if (!auth_header.empty()) {
             headers.insert({ _config.auth_header_name, auth_header });
@@ -96,9 +98,9 @@ UnifiedAIClient::ConnectionTestResult UnifiedAIClient::test_connection() {
         std::string url = _config.get_request_url(model_name);
         std::string body = payload.dump();
 
-        auto http_start = std::chrono::steady_clock::now();
+        auto http_start = thirdparty_compat::steady_clock::now();
         std::string response = _execute_http_request(url, headers, body);
-        auto http_end = std::chrono::steady_clock::now();
+        auto http_end = thirdparty_compat::steady_clock::now();
 
         double response_time = std::chrono::duration_cast<std::chrono::milliseconds>(http_end - http_start).count();
 
@@ -196,12 +198,12 @@ void UnifiedAIClient::update_config(const AIProviderConfig& new_config) {
         throw ConfigurationError("Invalid provider configuration");
     }
 
-    std::lock_guard<std::mutex> lock(_worker_mutex);
+    std::lock_guard<thirdparty_compat::mutex> lock(_worker_mutex);
     _config = new_config;
 }
 
 UnifiedAIClient::ProviderStats UnifiedAIClient::get_stats() const {
-    std::lock_guard<std::mutex> lock(_stats_mutex);
+    std::lock_guard<thirdparty_compat::mutex> lock(_stats_mutex);
     return _stats;
 }
 
@@ -219,7 +221,7 @@ void UnifiedAIClient::_process_request(const std::string& prompt,
 
     // Submit request to worker thread
     {
-        std::lock_guard<std::mutex> lock(_worker_mutex);
+        std::lock_guard<thirdparty_compat::mutex> lock(_worker_mutex);
         _is_processing = true;
         _should_stop = false;
 
@@ -275,7 +277,7 @@ void UnifiedAIClient::_process_single_request(const std::string& prompt,
         }
 
         // Build headers
-        httplib::Headers headers = _config.default_headers;
+        thirdparty_compat::Headers headers = _config.default_headers;
         std::string auth_header = _config.get_auth_header(_config.auth_prefix);
         if (!auth_header.empty()) {
             headers.insert({ _config.auth_header_name, auth_header });
@@ -287,9 +289,9 @@ void UnifiedAIClient::_process_single_request(const std::string& prompt,
 
         DebugLogger::log_request(_config.name, url, body);
 
-        auto http_start = std::chrono::steady_clock::now();
+        auto http_start = thirdparty_compat::steady_clock::now();
         std::string response_body = _execute_http_request(url, headers, body);
-        auto http_end = std::chrono::steady_clock::now();
+        auto http_end = thirdparty_compat::steady_clock::now();
 
         double response_time = std::chrono::duration_cast<std::chrono::milliseconds>(http_end - http_start).count();
 
@@ -331,7 +333,7 @@ void UnifiedAIClient::_process_single_request(const std::string& prompt,
 }
 
 std::string UnifiedAIClient::_execute_http_request(const std::string& url,
-                                                 const httplib::Headers& headers,
+                                                 const thirdparty_compat::Headers& headers,
                                                  const std::string& body) {
 
     if (url.empty()) {
@@ -340,7 +342,7 @@ std::string UnifiedAIClient::_execute_http_request(const std::string& url,
 
     // For now, use a simple HTTP client
     // In full implementation, this would use the connection pool
-    httplib::Client client(url.c_str());
+    thirdparty_compat::Client client(url.c_str());
     client.set_connection_timeout(_config.connection_timeout_ms / 1000);
     client.set_read_timeout(_config.read_timeout_ms / 1000);
 
@@ -382,7 +384,7 @@ std::string UnifiedAIClient::_generate_cache_key(const std::string& prompt,
 }
 
 void UnifiedAIClient::_update_stats(bool success, double response_time_ms, bool was_cached) const {
-    std::lock_guard<std::mutex> lock(_stats_mutex);
+    std::lock_guard<thirdparty_compat::mutex> lock(_stats_mutex);
 
     _stats.total_requests++;
     if (was_cached) _stats.cached_requests++;
@@ -417,8 +419,8 @@ void UnifiedAIClient::_worker_thread_main() {
     // Worker thread implementation for async processing
     // For now, this is a placeholder - requests are processed synchronously
     while (!_should_stop) {
-        std::unique_lock<std::mutex> lock(_worker_mutex);
-        _worker_cv.wait_for(lock, std::chrono::seconds(1));
+        std::unique_lock<thirdparty_compat::mutex> lock(_worker_mutex);
+        _worker_cv.wait_for(lock, thirdparty_compat::seconds(1));
 
         if (_should_stop) break;
     }

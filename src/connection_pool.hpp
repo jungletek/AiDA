@@ -1,22 +1,23 @@
 #pragma once
 
 #include "constants.hpp"
-#include <httplib.h>
+#include "thirdparty_compat.hpp"
 #include <memory>
 #include <queue>
-#include <mutex>
-#include <condition_variable>
-#include <unordered_map>
-#include <string>
-#include <chrono>
-#include <thread>
+
+// Use safe types from thirdparty_compat to avoid IDA SDK macro conflicts
+using httplib_Client = thirdparty_compat::Client;
+using safe_mutex = thirdparty_compat::mutex;
+using safe_condition_variable = thirdparty_compat::condition_variable;
+using safe_steady_clock = thirdparty_compat::steady_clock;
+using safe_chrono_minutes = thirdparty_compat::minutes;
 
 // Connection pool for HTTP clients to improve performance and resource management
 class ConnectionPool {
 private:
     std::queue<std::shared_ptr<httplib::Client>> _pool;
-    mutable std::mutex _pool_mutex;  // ← Mutable for const method locking
-    std::condition_variable _pool_cv;
+    mutable safe_mutex _pool_mutex;  // ← Mutable for const method locking
+    safe_condition_variable _pool_cv;
     size_t _max_pool_size;
     size_t _current_size;
 
@@ -24,12 +25,12 @@ private:
     std::unordered_map<std::string, std::queue<std::shared_ptr<httplib::Client>>> _host_pools;
 
     // Cleanup timer to remove stale connections
-    std::chrono::steady_clock::time_point _last_cleanup;
-    static constexpr auto CLEANUP_INTERVAL = std::chrono::minutes(5);
+    safe_steady_clock::time_point _last_cleanup;
+    static constexpr auto CLEANUP_INTERVAL = safe_chrono_minutes(5);
 
 public:
     explicit ConnectionPool(size_t max_pool_size = 10)
-        : _max_pool_size(max_pool_size), _current_size(0), _last_cleanup(std::chrono::steady_clock::now()) {}
+        : _max_pool_size(max_pool_size), _current_size(0), _last_cleanup(safe_steady_clock::now()) {}
 
     ~ConnectionPool() {
         clear();
@@ -37,7 +38,7 @@ public:
 
     // Get a client for the specified host
     std::shared_ptr<httplib::Client> acquire(const std::string& host) {
-        std::unique_lock<std::mutex> lock(_pool_mutex);
+        std::unique_lock<safe_mutex> lock(_pool_mutex);
 
         // Cleanup stale connections periodically
         cleanup_if_needed(lock);
@@ -113,7 +114,7 @@ public:
     void release(const std::string& host, std::shared_ptr<httplib::Client> client) {
         if (!client) return;
 
-        std::unique_lock<std::mutex> lock(_pool_mutex);
+        std::unique_lock<safe_mutex> lock(_pool_mutex);
 
         // Only return client if it's still valid and pool isn't full
         if (client->is_valid() && _current_size <= _max_pool_size) {
@@ -131,19 +132,19 @@ public:
 
     // Get pool statistics
     size_t get_current_size() const {
-        std::lock_guard<std::mutex> lock(_pool_mutex);
+        std::lock_guard<safe_mutex> lock(_pool_mutex);
         return _current_size;
     }
 
     size_t get_host_pool_count(const std::string& host) const {
-        std::lock_guard<std::mutex> lock(_pool_mutex);
+        std::lock_guard<safe_mutex> lock(_pool_mutex);
         auto it = _host_pools.find(host);
         return (it != _host_pools.end()) ? it->second.size() : 0;
     }
 
     // Clear all connections
     void clear() {
-        std::lock_guard<std::mutex> lock(_pool_mutex);
+        std::lock_guard<safe_mutex> lock(_pool_mutex);
 
         // Stop all clients in the general pool
         while (!_pool.empty()) {
@@ -170,7 +171,7 @@ public:
     }
 
 private:
-    void cleanup_if_needed(std::unique_lock<std::mutex>& lock) {
+    void cleanup_if_needed(std::unique_lock<safe_mutex>& lock) {
         auto now = std::chrono::steady_clock::now();
         if (now - _last_cleanup < CLEANUP_INTERVAL) {
             return;

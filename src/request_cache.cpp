@@ -5,7 +5,7 @@
 #include <iomanip>
 
 // Global request cache instance
-RequestCache g_request_cache(std::chrono::minutes(30), 1000);
+RequestCache g_request_cache(thirdparty_compat::minutes(30), 1000);
 
 // Generate a cache key using hash of request parameters
 std::string RequestCache::generate_cache_key(
@@ -14,13 +14,13 @@ std::string RequestCache::generate_cache_key(
     const std::string& request_body,
     const std::string& model_name) const {
 
-    std::stringstream ss;
+    thirdparty_compat::ostringstream ss;
     ss << host << "|" << path << "|" << request_body << "|" << model_name;
 
     std::string combined = ss.str();
 
     // Use macro-safe hash function to avoid IDA SDK conflicts
-    return thirdparty_compat::md5_hash(combined);
+    return thirdparty_compat::safe_md5_hash(combined);
 }
 
 // Try to get a cached response
@@ -30,7 +30,7 @@ std::optional<std::string> RequestCache::get(
     const std::string& request_body,
     const std::string& model_name) {
 
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
 
     std::string key = generate_cache_key(host, path, request_body, model_name);
     auto it = _cache.find(key);
@@ -59,7 +59,7 @@ void RequestCache::put(
     const std::string& response,
     bool is_error) {
 
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
 
     std::string key = generate_cache_key(host, path, request_body, model_name);
 
@@ -120,23 +120,23 @@ void RequestCache::enforce_limits() {
 
 // Cache management functions
 void RequestCache::clear() {
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
     _cache.clear();
 }
 
 size_t RequestCache::size() const {
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
     return _cache.size();
 }
 
 void RequestCache::cleanup_expired() {
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
     enforce_limits();
 }
 
 // Get cache statistics (simplified implementation)
 RequestCache::CacheStats RequestCache::get_stats() const {
-    std::lock_guard<std::mutex> lock(_cache_mutex);
+    std::lock_guard<safe_mutex> lock(_cache_mutex);
 
     size_t error_count = 0;
     for (const auto& pair : _cache) {

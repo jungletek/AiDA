@@ -1,106 +1,130 @@
 #pragma once
 
-#include <cstdarg>
-#include <sstream>
-#include <iomanip>
-#include <string>
-
 // ============================================================================
-// Third-party Library Compatibility Header
-// Comprehensive macro isolation for IDA SDK compatibility
+// Enhanced Third-party Library Compatibility Header
+// Comprehensive IDA SDK macro conflict resolution
 // ============================================================================
 
-// Strategic macro undefining for third-party libraries
-// IDA SDK defines macros that conflict with standard C++ libraries
+// ============================================================================
+// CRITICAL: Windows Header Include Order Fix
+// ============================================================================
 
-#pragma push_macro("snprintf")
-#pragma push_macro("vsnprintf")
-#pragma push_macro("swprintf")
-#pragma push_macro("vswprintf")
-#pragma push_macro("wait")
-#pragma push_macro("pid_t")
-
-// Temporarily undefine problematic IDA SDK macros
+// Undefine problematic macros BEFORE including any standard headers
+#ifdef snprintf
 #undef snprintf
-#undef vsnprintf
-#undef swprintf
-#undef vswprintf
-#undef wait
-#undef pid_t
+#endif
 
-// Include third-party libraries in macro-safe environment
-#include <nlohmann/json.hpp>
+#ifdef vsnprintf
+#undef vsnprintf
+#endif
+
+#ifdef swprintf
+#undef swprintf
+#endif
+
+#ifdef vswprintf
+#undef vswprintf
+#endif
+
+#ifdef wait
+#undef wait
+#endif
+
+#ifdef MD5
+#undef MD5
+#endif
+
+#ifdef MD5_CTX
+#undef MD5_CTX
+#endif
+
+// Handle pid_t conflict by ensuring IDA SDK is included first
+// The IDA SDK defines pid_t as int, but system headers define it as _pid_t
+// We'll let IDA SDK win by not undefining pid_t here
+
+// Force correct Windows header include order - this MUST be first
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+#ifndef _WINSOCKAPI_
+#define _WINSOCKAPI_
+#endif
+
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601  // Windows 7+
+#endif
+
+// Include Windows headers in correct order BEFORE any other includes
+#include <winsock2.h>
+#include <windows.h>
+
+// Forward declarations for IDA SDK types to avoid conflicts
+extern "C" {
+    typedef int pid_t;  // IDA SDK definition
+}
+
+// Include IDA SDK headers first to establish type definitions
+#include <ida.hpp>
+#include <idd.hpp>
+
+// ============================================================================
+// THIRD-PARTY LIBRARY INCLUDES WITH MACRO ISOLATION
+// ============================================================================
+
+// Include third-party libraries with minimal macro isolation
 #include <httplib.h>
 
-// Restore IDA SDK macros for the rest of the project
-#pragma pop_macro("snprintf")
-#pragma pop_macro("vsnprintf")
-#pragma pop_macro("swprintf")
-#pragma pop_macro("vswprintf")
-#pragma pop_macro("wait")
-#pragma pop_macro("pid_t")
+// Note: nlohmann/json.hpp should be included in individual source files
+// to avoid macro conflicts and include path issues
 
 // ============================================================================
-// Compatibility Aliases and Wrappers
+// SAFE TYPE ALIASES AND COMPATIBILITY LAYER
 // ============================================================================
 
-// Create safe aliases for commonly used functions that might be macro'd
 namespace thirdparty_compat {
+    // Safe type aliases that avoid IDA SDK conflicts
+    using pid_type = int;
+    using wait_function = void(*)();
 
-    // Safe snprintf wrapper that bypasses IDA SDK macro
-    inline int safe_snprintf(char* buffer, size_t bufsz, const char* format, ...) {
-        va_list va;
-        va_start(va, format);
-        int result = std::vsnprintf(buffer, bufsz, format, va);
-        va_end(va);
-        return result;
-    }
+    // Safe function wrappers for standard library functions (simplified)
+    // Note: Using standard library functions directly to avoid IDA SDK conflicts
 
-    // Safe string conversion that works with IDA SDK macros
-    inline std::string format_string(const char* format, ...) {
-        char buffer[4096];  // Reasonable buffer size
-        va_list va;
-        va_start(va, format);
-        std::vsnprintf(buffer, sizeof(buffer), format, va);
-        va_end(va);
-        return std::string(buffer);
-    }
-
-    // Safe MD5 hash function that works around IDA SDK macros
-    inline std::string md5_hash(const std::string& input) {
-        // Use OpenSSL MD5 functions with proper macro isolation
-        // This implementation avoids IDA SDK macro conflicts
-
-        // Create a simple hash using string operations instead of OpenSSL
-        // to avoid macro conflicts with IDA SDK
-        size_t hash = 0;
+    // Safe MD5 hash replacement (IDA SDK conflicts with OpenSSL MD5)
+    inline std::string safe_md5_hash(const std::string& input) {
+        // Simple hash to avoid IDA SDK MD5 macro conflicts
+        size_t hash = 0x5381;  // FNV-1a initial hash
         for (char c : input) {
-            hash = hash * 31 + static_cast<unsigned char>(c);
+            hash = hash * 33 + static_cast<unsigned char>(c);
         }
-
         std::stringstream ss;
         ss << std::hex << std::setw(8) << std::setfill('0') << hash;
         return ss.str();
     }
 
-} // namespace thirdparty_compat
+    // Safe type definitions (json defined in individual files to avoid include issues)
+    // using json = nlohmann::json;
+    using Client = httplib::Client;
+    using Headers = httplib::Headers;
+    using Result = httplib::Result;
 
-// ============================================================================
-// Type Aliases for IDA SDK Compatibility
-// ============================================================================
-
-// Create type aliases that work with IDA SDK macros
-using json = nlohmann::json;
-using httplib_Client = httplib::Client;
-using httplib_Headers = httplib::Headers;
-using httplib_Result = httplib::Result;
-
-// Safe using declarations for commonly used types
-namespace safe_types {
+    // Safe standard library aliases to avoid IDA SDK macro conflicts
+    using string = std::string;
+    using vector = std::vector<std::string>;
     using mutex = std::mutex;
     using condition_variable = std::condition_variable;
     using thread = std::thread;
-    using string = std::string;
-    using vector = std::vector<std::string>;
-    using unordered_map = std::unordered_map<std::string, std::string>;
+    using ostringstream = std::ostringstream;
+    using istringstream = std::istringstream;
+
+    // Safe chrono aliases
+    using steady_clock = std::chrono::steady_clock;
+    using system_clock = std::chrono::system_clock;
+    using milliseconds = std::chrono::milliseconds;
+    using seconds = std::chrono::seconds;
+    using minutes = std::chrono::minutes;
+
+    // Safe atomic aliases
+    using atomic_bool = std::atomic<bool>;
+    using atomic_size_t = std::atomic<size_t>;
 }

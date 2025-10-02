@@ -1,11 +1,15 @@
 #pragma once
 
 #include "constants.hpp"
+#include "thirdparty_compat.hpp"
 #include <string>
 #include <optional>
 #include <unordered_map>
-#include <mutex>
-#include <chrono>
+
+// Use safe types from thirdparty_compat to avoid IDA SDK macro conflicts
+using safe_mutex = thirdparty_compat::mutex;
+using safe_steady_clock = thirdparty_compat::steady_clock;
+using safe_chrono_minutes = thirdparty_compat::minutes;
 
 // Request cache to avoid duplicate API calls and improve performance
 class RequestCache {
@@ -22,8 +26,8 @@ private:
     };
 
     std::unordered_map<std::string, CacheEntry> _cache;
-    mutable std::mutex _cache_mutex;  // ← Mutable for const method locking
-    std::chrono::minutes _default_ttl;
+    mutable safe_mutex _cache_mutex;  // ← Mutable for const method locking
+    safe_chrono_minutes _default_ttl;
     size_t _max_cache_size;
 
     // Cache key generation
@@ -35,7 +39,7 @@ private:
 
 public:
     explicit RequestCache(
-        std::chrono::minutes default_ttl = std::chrono::minutes(30),
+        safe_chrono_minutes default_ttl = safe_chrono_minutes(30),
         size_t max_cache_size = 1000)
         : _default_ttl(default_ttl), _max_cache_size(max_cache_size) {}
 
@@ -58,7 +62,7 @@ public:
     // Cache management
     void clear();
     size_t size() const;
-    void set_ttl(std::chrono::minutes ttl) { _default_ttl = ttl; }
+    void set_ttl(safe_chrono_minutes ttl) { _default_ttl = ttl; }
     void set_max_size(size_t max_size) { _max_cache_size = max_size; }
 
     // Cleanup expired entries

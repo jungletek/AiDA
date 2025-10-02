@@ -1,8 +1,9 @@
 #pragma once
 
-// IDA SDK headers for constants
-#include <name.hpp>  // For MAXNAMELEN
-#include <ida.hpp>
+#include <cstddef>
+
+// Constants file - NO IDA SDK DEPENDENCIES to avoid macro conflicts
+// IDA SDK dependent constants are defined in ida_constants.hpp
 
 namespace AiDAConstants {
 // Network timeouts
@@ -19,8 +20,8 @@ static constexpr int MAX_RETRY_DELAY_MS = 30000; // 30 seconds
 static constexpr size_t MAX_RESPONSE_SIZE = 10 * 1024 * 1024;  // 10MB
 static constexpr size_t MAX_ERROR_RESPONSE_SIZE = 1024 * 1024;  // 1MB
 
-// UI limits
-static constexpr int MAX_FUNCTION_NAME_LENGTH = MAXNAMELEN - 10;
+// UI limits (IDA SDK independent versions)
+static constexpr int MAX_FUNCTION_NAME_LENGTH = 250;  // Reasonable default, was MAXNAMELEN - 10
 static constexpr int MAX_COMMENT_LENGTH = 82;
 
 // Threading
