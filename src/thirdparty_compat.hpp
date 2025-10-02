@@ -2,47 +2,13 @@
 
 // ============================================================================
 // Enhanced Third-party Library Compatibility Header
-// Comprehensive IDA SDK macro conflict resolution
+// Pure C++ compatibility layer - NO IDA SDK DEPENDENCIES
 // ============================================================================
 
 // ============================================================================
-// CRITICAL: Windows Header Include Order Fix
+// Windows Header Include Order Fix (for third-party libraries)
 // ============================================================================
 
-// Undefine problematic macros BEFORE including any standard headers
-#ifdef snprintf
-#undef snprintf
-#endif
-
-#ifdef vsnprintf
-#undef vsnprintf
-#endif
-
-#ifdef swprintf
-#undef swprintf
-#endif
-
-#ifdef vswprintf
-#undef vswprintf
-#endif
-
-#ifdef wait
-#undef wait
-#endif
-
-#ifdef MD5
-#undef MD5
-#endif
-
-#ifdef MD5_CTX
-#undef MD5_CTX
-#endif
-
-// Handle pid_t conflict by ensuring IDA SDK is included first
-// The IDA SDK defines pid_t as int, but system headers define it as _pid_t
-// We'll let IDA SDK win by not undefining pid_t here
-
-// Force correct Windows header include order - this MUST be first
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
@@ -55,60 +21,26 @@
 #define _WIN32_WINNT 0x0601  // Windows 7+
 #endif
 
-// Include Windows headers in correct order BEFORE any other includes
+// Include Windows headers in correct order for third-party libraries
 #include <winsock2.h>
 #include <windows.h>
-
-// Forward declarations for IDA SDK types to avoid conflicts
-extern "C" {
-    typedef int pid_t;  // IDA SDK definition
-}
-
-// Include IDA SDK headers first to establish type definitions
-#include <ida.hpp>
-#include <idd.hpp>
+#include <cstdarg>
 
 // ============================================================================
-// THIRD-PARTY LIBRARY INCLUDES WITH MACRO ISOLATION
+// THIRD-PARTY LIBRARY INCLUDES
 // ============================================================================
 
-// Include third-party libraries with minimal macro isolation
-#include <httplib.h>
-
-// Note: nlohmann/json.hpp should be included in individual source files
-// to avoid macro conflicts and include path issues
+// Note: Third-party libraries should be included in individual source files
+// where needed to maintain clean separation and avoid conflicts
+// #include <httplib.h>  // Include only where needed
+// #include <nlohmann/json.hpp>  // Include only where needed
 
 // ============================================================================
 // SAFE TYPE ALIASES AND COMPATIBILITY LAYER
 // ============================================================================
 
 namespace thirdparty_compat {
-    // Safe type aliases that avoid IDA SDK conflicts
-    using pid_type = int;
-    using wait_function = void(*)();
-
-    // Safe function wrappers for standard library functions (simplified)
-    // Note: Using standard library functions directly to avoid IDA SDK conflicts
-
-    // Safe MD5 hash replacement (IDA SDK conflicts with OpenSSL MD5)
-    inline std::string safe_md5_hash(const std::string& input) {
-        // Simple hash to avoid IDA SDK MD5 macro conflicts
-        size_t hash = 0x5381;  // FNV-1a initial hash
-        for (char c : input) {
-            hash = hash * 33 + static_cast<unsigned char>(c);
-        }
-        std::stringstream ss;
-        ss << std::hex << std::setw(8) << std::setfill('0') << hash;
-        return ss.str();
-    }
-
-    // Safe type definitions (json defined in individual files to avoid include issues)
-    // using json = nlohmann::json;
-    using Client = httplib::Client;
-    using Headers = httplib::Headers;
-    using Result = httplib::Result;
-
-    // Safe standard library aliases to avoid IDA SDK macro conflicts
+    // Safe type aliases for standard library compatibility
     using string = std::string;
     using vector = std::vector<std::string>;
     using mutex = std::mutex;
@@ -127,4 +59,34 @@ namespace thirdparty_compat {
     // Safe atomic aliases
     using atomic_bool = std::atomic<bool>;
     using atomic_size_t = std::atomic<size_t>;
-}
+
+    // Safe MD5 hash replacement (simple hash to avoid any potential conflicts)
+    inline std::string safe_md5_hash(const std::string& input) {
+        // Simple hash to avoid any potential MD5 macro conflicts
+        size_t hash = 0x5381;  // FNV-1a initial hash
+        for (char c : input) {
+            hash = hash * 33 + static_cast<unsigned char>(c);
+        }
+        std::stringstream ss;
+        ss << std::hex << std::setw(8) << std::setfill('0') << hash;
+        return ss.str();
+    }
+
+    // Type definitions for third-party libraries
+    using Client = httplib::Client;
+    using Headers = httplib::Headers;
+    using Result = httplib::Result;
+
+    // Standard library function wrappers to ensure consistency
+    inline int safe_snprintf(char* buffer, size_t bufsz, const char* format, ...) {
+        va_list va;
+        va_start(va, format);
+        int result = std::vsnprintf(buffer, bufsz, format, va);
+        va_end(va);
+        return result;
+    }
+
+    inline size_t safe_strftime(char* ptr, size_t maxsize, const char* format, const std::tm* timeptr) {
+        return std::strftime(ptr, maxsize, format, timeptr);
+    }
+};

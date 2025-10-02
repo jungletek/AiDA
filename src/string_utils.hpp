@@ -1,66 +1,103 @@
 #pragma once
 
+// ============================================================================
+// String Utilities - IDA SDK Independent Version
+// This file contains string utilities that don't depend on IDA SDK
+// IDA SDK specific string operations are in ida_layer/string_utils.hpp
+// ============================================================================
+
 #include <string>
 #include <optional>
 #include <vector>
 #include <memory>
-#include <ida.hpp>  // For qstring
 
 #ifdef _WIN32
 #include <Windows.h>
 #endif
 
 namespace string_utils {
-    // Safe conversion with error handling
-    std::optional<std::string> safe_to_std(const qstring& qs);
-    std::optional<qstring> safe_to_qstring(const std::string& s);
+    // Standard C++ string utilities (IDA SDK independent)
 
-    // Convert qstring to std::string (legacy compatibility)
-    std::string to_std(const qstring& qs);
+    // Safe string operations with error handling
+    std::optional<std::string> safe_copy(const std::string& source);
+    std::optional<std::string> safe_substring(const std::string& str, size_t pos, size_t len = std::string::npos);
+    std::optional<std::string> safe_trim(const std::string& str);
+    std::optional<std::string> safe_replace(const std::string& str, const std::string& from, const std::string& to);
 
-    // Convert std::string to qstring (legacy compatibility)
-    qstring to_qstring(const std::string& s);
+    // String validation utilities
+    bool is_valid_utf8(const std::string& str);
+    bool is_printable_ascii(const std::string& str);
+    bool has_null_bytes(const std::string& str);
 
-    // Convert C-string to qstring (legacy compatibility)
-    qstring to_qstring(const char* s);
+    // Conversion utilities
+    std::string to_lower(const std::string& str);
+    std::string to_upper(const std::string& str);
+    std::string to_hex_string(uint64_t value, size_t width = 0);
+    std::optional<uint64_t> from_hex_string(const std::string& hex_str);
 
-    // Utility for converting string literals at compile time
-    template<size_t N>
-    qstring to_qstring(const char (&s)[N]) {
-        return qstring(s);
-    }
+    // String formatting utilities
+    std::string format_address(uint64_t address);
+    std::string format_size(size_t size);
+    std::string format_bytes(const std::vector<uint8_t>& data, size_t max_len = 256);
 
-    // Batch conversion utilities
-    std::vector<std::string> qstringvec_to_stdvec(const qstrvec_t& qvec);
-    qstrvec_t stdvec_to_qstringvec(const std::vector<std::string>& vec);
+    // String splitting and joining
+    std::vector<std::string> split(const std::string& str, char delimiter);
+    std::vector<std::string> split_lines(const std::string& str);
+    std::string join(const std::vector<std::string>& parts, const std::string& separator);
+
+    // String analysis
+    size_t count_lines(const std::string& str);
+    size_t count_words(const std::string& str);
+    std::string get_line(const std::string& str, size_t line_number);
+
+    // Safe memory operations
+    std::optional<std::string> safe_read_string(const void* data, size_t max_len);
+    std::vector<uint8_t> to_bytes(const std::string& str);
+
+    // Error handling
+    struct StringError {
+        enum Code {
+            SUCCESS = 0,
+            INVALID_UTF8 = 1,
+            NULL_BYTE_DETECTED = 2,
+            OUT_OF_RANGE = 3,
+            CONVERSION_FAILED = 4,
+            MEMORY_ERROR = 5
+        };
+
+        Code error_code;
+        std::string message;
+        size_t position;
+    };
+
+    StringError get_last_error();
+    void clear_error();
 }
 
-// RAII string converters with automatic cleanup and error handling
-class QStringConverter {
+// RAII string buffer with automatic cleanup and error handling
+class StringBuffer {
 private:
     std::unique_ptr<char[]> _buffer;
-    qstring _qstr;
-    std::string _stdstr;
+    size_t _size;
     bool _valid;
 
 public:
-    explicit QStringConverter(const std::string& s);
-    explicit QStringConverter(const qstring& qs);
-    explicit QStringConverter(const char* s);
-    ~QStringConverter();
-
-    // Conversion operators
-    operator std::string() const { return _stdstr; }
-    operator qstring() const { return _qstr; }
+    explicit StringBuffer(size_t size);
+    explicit StringBuffer(const std::string& content);
+    ~StringBuffer();
 
     // Accessors
-    const qstring& qstr() const { return _qstr; }
-    const std::string& str() const { return _stdstr; }
-    bool is_valid() const { return _valid; }
+    char* data() { return _buffer.get(); }
+    const char* data() const { return _buffer.get(); }
+    size_t size() const { return _size; }
+    bool is_valid() const { return _valid && _buffer != nullptr; }
+
+    // String conversion
+    std::string to_string() const;
 
     // Disable copying
-    QStringConverter(const QStringConverter&) = delete;
-    QStringConverter& operator=(const QStringConverter&) = delete;
+    StringBuffer(const StringBuffer&) = delete;
+    StringBuffer& operator=(const StringBuffer&) = delete;
 };
 
 // Enhanced clipboard handling with proper RAII
@@ -74,7 +111,6 @@ public:
     ~ClipboardManager();
 
     bool is_valid() const { return _opened; }
-    bool set_text(const qstring& text);
     bool set_text(const std::string& text);
 
     // Disable copying
