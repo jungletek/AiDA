@@ -1,3 +1,4 @@
+#include "thirdparty_compat.hpp"
 #include "ai_provider_config.hpp"
 #include "string_utils.hpp"
 #include <algorithm>

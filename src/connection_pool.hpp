@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <string>
 #include <chrono>
+#include <thread>
 
 // Connection pool for HTTP clients to improve performance and resource management
 class ConnectionPool {

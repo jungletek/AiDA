@@ -1,10 +1,12 @@
+#include "thirdparty_compat.hpp"
 #include "aida_pro.hpp"
 #include "debug_logger.hpp"
 #include "string_utils.hpp"
 #include "constants.hpp"
 #include "connection_pool.hpp"
 #include "request_cache.hpp"
-#include <nlohmann/json.hpp>
+#include <algorithm>
+#include <thread>
 
 using json = nlohmann::json;
 

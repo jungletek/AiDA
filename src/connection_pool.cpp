@@ -1,3 +1,4 @@
+#include "thirdparty_compat.hpp"
 #include "connection_pool.hpp"
 #include "debug_logger.hpp"
 

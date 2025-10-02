@@ -1,13 +1,13 @@
 #include "request_cache.hpp"
 #include "debug_logger.hpp"
+#include "thirdparty_compat.hpp"
 #include <sstream>
 #include <iomanip>
-#include <openssl/md5.h> // For cache key hashing
 
 // Global request cache instance
 RequestCache g_request_cache(std::chrono::minutes(30), 1000);
 
-// Generate a cache key using MD5 hash of request parameters
+// Generate a cache key using hash of request parameters
 std::string RequestCache::generate_cache_key(
     const std::string& host,
     const std::string& path,
@@ -19,16 +19,8 @@ std::string RequestCache::generate_cache_key(
 
     std::string combined = ss.str();
 
-    // Generate MD5 hash for compact cache key
-    unsigned char digest[MD5_DIGEST_LENGTH];
-    MD5(reinterpret_cast<const unsigned char*>(combined.c_str()), combined.length(), digest);
-
-    std::stringstream hash_ss;
-    for (int i = 0; i < MD5_DIGEST_LENGTH; ++i) {
-        hash_ss << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(digest[i]);
-    }
-
-    return hash_ss.str();
+    // Use macro-safe hash function to avoid IDA SDK conflicts
+    return thirdparty_compat::md5_hash(combined);
 }
 
 // Try to get a cached response
@@ -77,7 +69,7 @@ void RequestCache::put(
         return;
     }
 
-    _cache[key] = CacheEntry(response, is_error);
+    _cache.emplace(key, CacheEntry(response, is_error));
     enforce_limits();
 }
 
