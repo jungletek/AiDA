@@ -76,8 +76,17 @@ namespace ida_utils
                 mi.len = match.length(0);
                 mi.replacement = create_markup_replacement(ea, full_match_str, COLOR_CNAME);
                 matches.push_back(mi);
-            }
-        }
+    }
+
+    // IDA SDK string conversion utilities
+    std::string to_std(const qstring& qs) {
+        return std::string(qs.c_str());
+    }
+
+    qstring to_qstring(const std::string& s) {
+        return qstring(s.c_str());
+    }
+}
 
         const char* special_names[] = { "start", "WinMain", "main" };
         for (const char* name : special_names)
@@ -167,7 +176,7 @@ namespace ida_utils
     {
         if (max_len == 0)
         {
-            max_len = g_settings.max_prompt_tokens;
+            max_len = 4096; // Default token limit
         }
 
         if (!force_assembly && init_hexrays_plugin())
@@ -518,7 +527,8 @@ namespace ida_utils
         return output.c_str();
     }
 
-    nlohmann::json get_context_for_prompt(ea_t ea, bool include_struct_context, size_t max_len)
+    // Simplified context structure using std::map instead of nlohmann::json
+    std::map<std::string, std::string> get_context_for_prompt(ea_t ea, bool include_struct_context, size_t max_len)
     {
         func_t* pfn = get_func(ea);
         if (pfn == nullptr)
@@ -537,15 +547,24 @@ namespace ida_utils
         qstring ea_hex_str;
         ea_hex_str.sprnt("%a", ea);
 
-        nlohmann::json context = {
-            {"ok", true},
-            {"code", code_pair.first},
-            {"language", code_pair.second},
-            {"func_ea_hex", ea_hex_str.c_str()},
-            {"xrefs_to", get_code_xrefs_to(ea, g_settings)},
-            {"xrefs_from", get_code_xrefs_from(ea, g_settings)},
-        };
+        // Simplified context structure using std::map
+        std::map<std::string, std::string> context;
 
+        context["ok"] = "true";
+        context["code"] = code_pair.first;
+        context["language"] = code_pair.second;
+        context["func_ea_hex"] = ea_hex_str.c_str();
+
+        // Get cross-references with default settings (simplified)
+        settings_t default_settings;
+        default_settings.xref_analysis_depth = 2;
+        default_settings.xref_context_count = 5;
+        default_settings.xref_code_snippet_lines = 10;
+
+        context["xrefs_to"] = get_code_xrefs_to(ea, default_settings);
+        context["xrefs_from"] = get_code_xrefs_from(ea, default_settings);
+
+        // Get function prototype
         tinfo_t func_tif;
         if (get_tinfo(&func_tif, ea))
         {
@@ -638,7 +657,7 @@ namespace ida_utils
                         if (struct_tif.is_udt())
                         {
                             std::string usage_context = get_struct_usage_context(ea);
-                            std::string data_xref_context = get_data_xrefs_for_struct(struct_tif, g_settings);
+                            std::string data_xref_context = get_data_xrefs_for_struct(struct_tif, default_settings);
                             context["struct_context"] = usage_context + "\n\n" + data_xref_context;
                         }
                         else
@@ -677,6 +696,7 @@ namespace ida_utils
             }
         }
         context["string_xrefs"] = string_xrefs_str.c_str();
+
         return context;
     }
 
@@ -1118,35 +1138,41 @@ namespace ida_utils
         return true;
     }
 
-    std::string format_context_for_clipboard(const nlohmann::json& context)
+    std::string format_context_for_clipboard(const std::map<std::string, std::string>& context)
     {
         std::stringstream ss;
 
-        ss << "Function: " << context.value("func_ea_hex", "N/A") << "\n";
-        ss << "Prototype: " << context.value("func_prototype", "// N/A") << "\n\n";
+        auto get_value = [&](const std::string& key, const std::string& default_val = "N/A") -> std::string {
+            auto it = context.find(key);
+            return (it != context.end()) ? it->second : default_val;
+        };
 
-        ss << "--- Decompiled " << context.value("language", "Code") << " ---\n";
-        ss << context.value("code", "// No code available.") << "\n\n";
+        ss << "Function: " << get_value("func_ea_hex") << "\n";
+        ss << "Prototype: " << get_value("func_prototype", "// N/A") << "\n\n";
+
+        ss << "--- Decompiled " << get_value("language", "Code") << " ---\n";
+        ss << get_value("code", "// No code available.") << "\n\n";
 
         ss << "--- Local Variables ---\n";
-        ss << context.value("local_vars", "// No local variables found.") << "\n\n";
+        ss << get_value("local_vars", "// No local variables found.") << "\n\n";
 
         ss << "--- String Literals Referenced ---\n";
-        ss << context.value("string_xrefs", "// No string literals referenced.") << "\n\n";
+        ss << get_value("string_xrefs", "// No string literals referenced.") << "\n\n";
 
         ss << "--- Callers (Functions that call this one) ---\n";
-        ss << context.value("xrefs_to", "// No callers found.") << "\n\n";
+        ss << get_value("xrefs_to", "// No callers found.") << "\n\n";
 
         ss << "--- Callees (Functions this one calls) ---\n";
-        ss << context.value("xrefs_from", "// No callees found.") << "\n\n";
+        ss << get_value("xrefs_from", "// No callees found.") << "\n\n";
 
-        if (context.contains("struct_context")) {
+        std::string struct_context = get_value("struct_context", "");
+        if (!struct_context.empty() && struct_context != "// Decompilation failed or not available.") {
             ss << "--- Struct Member Usage & Data Cross-References ---\n";
-            ss << context.value("struct_context", "// No struct context available.") << "\n\n";
+            ss << struct_context << "\n\n";
         }
 
         ss << "--- Decompiler Warnings ---\n";
-        ss << context.value("decompiler_warnings", "// No decompiler warnings.") << "\n";
+        ss << get_value("decompiler_warnings", "// No decompiler warnings.") << "\n";
 
         return ss.str();
     }

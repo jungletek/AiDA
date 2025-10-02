@@ -38,9 +38,18 @@ target_compile_definitions(AiDA_ida_layer PRIVATE
     __EA64__
     _CRT_SECURE_NO_WARNINGS
     _SCL_SECURE_NO_WARNINGS
-    WIN32_LEAN_AND_MEAN
+    # WIN32_LEAN_AND_MEAN  # ❌ Removed - defined by IDA SDK
     NOMINMAX
 )
+
+# Suppress known IDA SDK conflicts
+if(MSVC)
+    target_compile_options(AiDA_ida_layer PRIVATE
+        -wd4005  # Macro redefinition warnings
+        -wd4996  # Deprecated function warnings
+        -wd4068  # Unknown pragma warnings
+    )
+endif()
 
 # IDA layer links against IDA SDK
 target_link_libraries(AiDA_ida_layer PRIVATE ${IDA_LIBRARY})

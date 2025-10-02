@@ -53,26 +53,33 @@ target_include_directories(AiDA_service_layer PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 
-# CRITICAL: Service Layer uses standard C++ - OVERRIDE IDA SDK macros
+# CRITICAL: Service Layer uses standard C++ - SELECTIVE MACRO OVERRIDES
 target_compile_definitions(AiDA_service_layer PRIVATE
-    # Override IDA SDK macros with standard library functions
-    snprintf=snprintf
-    vsnprintf=vsnprintf
-    MD5=MD5
-    MD5_CTX=MD5_CTX
-    # Standard C++ definitions
-    WIN32_LEAN_AND_MEAN
+    # Standard C++ definitions (WIN32_LEAN_AND_MEAN defined by thirdparty_compat.hpp)
+    # WIN32_LEAN_AND_MEAN  # ❌ Removed - defined by thirdparty_compat.hpp
     NOMINMAX
     CPPHTTPLIB_OPENSSL_SUPPORT
+
+    # Force include order for Windows headers
+    _WINSOCKAPI_ _WINSOCK_H
+
+    # SELECTIVE MACRO OVERRIDES - Only override macros that actually conflict
+    # snprintf=ida_snprintf vsnprintf=ida_vsnprintf  # ❌ Removed - breaks std library
+    # swprintf=ida_swprintf vswprintf=ida_vswprintf  # ❌ Removed - breaks std library
+    # wait=dont_use_wait pid_t=ida_pid_t            # ❌ Removed - not needed here
+    # MD5=ida_MD5 MD5_CTX=ida_MD5_CTX              # ❌ Removed - use safe replacements
 )
 
-# Force macro overrides at compiler level for service layer
+# Minimal compiler-level macro overrides for service layer
 if(MSVC)
     target_compile_options(AiDA_service_layer PRIVATE
-        -Dsnprintf=snprintf
-        -Dvsnprintf=vsnprintf
-        -DMD5=MD5
-        -DMD5_CTX=MD5_CTX
+        # Minimal Windows compatibility flags
+        -DNOMINMAX
+        # -DWIN32_LEAN_AND_MEAN  # ❌ Removed - defined by thirdparty_compat.hpp
+        -D_WINSOCKAPI_
+        # Suppress some common warnings
+        -wd4005  # Macro redefinition warnings
+        -wd4996  # Deprecated function warnings
     )
 endif()
 

@@ -9,17 +9,9 @@
 // Windows Header Include Order Fix (for third-party libraries)
 // ============================================================================
 
-#ifndef WIN32_LEAN_AND_MEAN
-#define WIN32_LEAN_AND_MEAN
-#endif
-
-#ifndef _WINSOCKAPI_
-#define _WINSOCKAPI_
-#endif
-
-#ifndef _WIN32_WINNT
-#define _WIN32_WINNT 0x0601  // Windows 7+
-#endif
+// Force correct Windows header include order for third-party libraries
+#define _WINSOCKAPI_  // Prevent winsock.h inclusion
+#define WIN32_LEAN_AND_MEAN  // Reduce Windows header size
 
 // Include Windows headers in correct order for third-party libraries
 #include <winsock2.h>
@@ -36,15 +28,6 @@
 #include <iomanip>
 #include <atomic>
 #include <chrono>
-
-// ============================================================================
-// THIRD-PARTY LIBRARY INCLUDES
-// ============================================================================
-
-// Note: Third-party libraries should be included in individual source files
-// where needed to maintain clean separation and avoid conflicts
-// #include <httplib.h>  // Include only where needed
-// #include <nlohmann/json.hpp>  // Include only where needed
 
 // ============================================================================
 // SAFE TYPE ALIASES AND COMPATIBILITY LAYER
@@ -93,7 +76,7 @@ namespace thirdparty_compat {
     inline int safe_snprintf(char* buffer, size_t bufsz, const char* format, ...) {
         va_list va;
         va_start(va, format);
-        int result = std::vsnprintf(buffer, bufsz, format, va);
+        int result = vsnprintf(buffer, bufsz, format, va);
         va_end(va);
         return result;
     }

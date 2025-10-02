@@ -190,10 +190,13 @@ namespace string_utils {
             ss << "...";
         }
 
-        return ss.str();
-    }
+    return ss.str();
+}
 
-    // String splitting and joining
+// IDA SDK string conversion utilities moved to ida_utils.cpp
+// These functions require IDA SDK headers and should not be in the general string_utils
+
+// String splitting and joining
     std::vector<std::string> split(const std::string& str, char delimiter) {
         std::vector<std::string> result;
         std::stringstream ss(str);

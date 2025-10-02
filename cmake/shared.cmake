@@ -21,12 +21,26 @@ endforeach()
 
 add_library(AiDA_shared OBJECT ${SHARED_SOURCES})
 
+# Shared utilities need IDA SDK access for ida_utils.cpp
 target_include_directories(AiDA_shared PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${IDASDK_INCLUDE_DIR}
 )
 
-# Shared utilities use standard C++ - no IDA SDK dependencies
+# Shared utilities need IDA SDK definitions (WIN32_LEAN_AND_MEAN defined by IDA SDK)
 target_compile_definitions(AiDA_shared PRIVATE
-    WIN32_LEAN_AND_MEAN
+    # WIN32_LEAN_AND_MEAN  # ❌ Removed - already defined by IDA SDK
     NOMINMAX
+    # IDA SDK compatibility definitions
+    __NT__ __IDP__ __X64__ __EA64__
+    _CRT_SECURE_NO_WARNINGS _SCL_SECURE_NO_WARNINGS
 )
+
+# Suppress known IDA SDK conflicts
+if(MSVC)
+    target_compile_options(AiDA_shared PRIVATE
+        -wd4005  # Macro redefinition warnings
+        -wd4996  # Deprecated function warnings
+        -wd4068  # Unknown pragma warnings
+    )
+endif()

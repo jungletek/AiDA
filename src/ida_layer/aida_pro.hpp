@@ -92,10 +92,13 @@
 
 
 #include "../prompts.hpp"
-// Forward declarations instead of includes to avoid circular dependency
+
+// Forward declarations to avoid including third-party dependent headers
 class UnifiedAIClient;
-// Settings will be accessed through the bridge layer
+struct settings_t;
+
+// IDA SDK only - no third-party dependencies
 #include "../ida_utils.hpp"
 #include "ui.hpp"
 #include "actions.hpp"
-#include "aida.hpp"
+#include "aida.hpp"  // ✅ Re-added - needed for aida_plugin_t definition

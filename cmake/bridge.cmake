@@ -37,8 +37,17 @@ target_compile_definitions(AiDA_bridge PRIVATE
     __EA64__
     _CRT_SECURE_NO_WARNINGS
     _SCL_SECURE_NO_WARNINGS
-    WIN32_LEAN_AND_MEAN
+    # WIN32_LEAN_AND_MEAN  # ❌ Removed - defined by IDA SDK
     NOMINMAX
     # Enable macro isolation for bridge layer
     _IDA_SDK_ISOLATION_LAYER_
 )
+
+# Suppress known IDA SDK conflicts
+if(MSVC)
+    target_compile_options(AiDA_bridge PRIVATE
+        -wd4005  # Macro redefinition warnings
+        -wd4996  # Deprecated function warnings
+        -wd4068  # Unknown pragma warnings
+    )
+endif()

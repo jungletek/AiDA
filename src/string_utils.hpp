@@ -40,6 +40,11 @@ namespace string_utils {
     std::string format_size(size_t size);
     std::string format_bytes(const std::vector<uint8_t>& data, size_t max_len = 256);
 
+    // IDA SDK string conversion utilities (implemented in ida_utils.cpp)
+    // These functions are declared here but implemented with IDA SDK includes
+    std::string to_std(const qstring& qs);
+    qstring to_qstring(const std::string& s);
+
     // String splitting and joining
     std::vector<std::string> split(const std::string& str, char delimiter);
     std::vector<std::string> split_lines(const std::string& str);
