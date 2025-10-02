@@ -20,7 +20,7 @@
 #include <mutex>
 #include <condition_variable>
 
-#include <allow_deprecated.hpp>
+
 #include <auto.hpp>
 #include <bitrange.hpp>
 #include <bytes.hpp>
@@ -91,9 +91,10 @@
 #include <xref.hpp>
 
 
-#include "../service_layer/settings.hpp"
 #include "../prompts.hpp"
-#include "../service_layer/ai_client.hpp"
+// Forward declarations instead of includes to avoid circular dependency
+class UnifiedAIClient;
+// Settings will be accessed through the bridge layer
 #include "../ida_utils.hpp"
 #include "ui.hpp"
 #include "actions.hpp"

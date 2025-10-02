@@ -23,6 +23,24 @@ foreach(source_file ${SERVICE_LAYER_SOURCES})
 endforeach()
 
 # ============================================================================
+# Third-Party Dependencies Target
+# ============================================================================
+
+# Create interface library for third-party dependencies
+add_library(AiDA_thirdparty_dependencies INTERFACE)
+
+# Link nlohmann/json and cpp-httplib to the interface library
+target_link_libraries(AiDA_thirdparty_dependencies INTERFACE
+    nlohmann_json::nlohmann_json
+    httplib::httplib
+)
+
+# Include directories for third-party libraries
+target_include_directories(AiDA_thirdparty_dependencies INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# ============================================================================
 # Service Layer Target
 # ============================================================================
 

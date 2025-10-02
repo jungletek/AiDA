@@ -1,4 +1,4 @@
-#include "aida_pro.hpp"
+// aida_pro.hpp include removed to avoid circular dependency
 
 settings_t g_settings;
 

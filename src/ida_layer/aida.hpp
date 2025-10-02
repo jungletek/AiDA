@@ -7,7 +7,9 @@
 #include <idp.hpp>
 #include <loader.hpp>
 
-#include "unified_ai_client.hpp"
+#include "../service_layer/unified_ai_client.hpp"
+// Forward declaration to avoid circular dependency
+class UnifiedAIClient;
 
 class aida_plugin_t : public plugmod_t
 {

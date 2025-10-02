@@ -1,7 +1,8 @@
 #pragma once
 
-#include "aida_pro.hpp"
 #include "constants.hpp"
+// Forward declarations to avoid IDA SDK dependency
+class aida_plugin_t;
 #include <vector>
 #include <string>
 

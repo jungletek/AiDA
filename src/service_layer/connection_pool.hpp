@@ -4,6 +4,7 @@
 #include "thirdparty_compat.hpp"
 #include <memory>
 #include <queue>
+#include <unordered_map>
 
 // Use safe types from thirdparty_compat to avoid IDA SDK macro conflicts
 using httplib_Client = thirdparty_compat::Client;

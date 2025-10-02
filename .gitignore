@@ -22,5 +22,37 @@ Release/
 x64/
 *.log
 
-# just in case
-ai_assistant.cfg 
+# CMake build directories
+build/
+cmake-build-*/
+out/
+cmake-build-*
+build-*
+
+# CMake FetchContent dependencies (auto-generated)
+_deps/
+build/_deps/
+
+# External projects and tools
+cipher-server/
+node-v20.18.0-win-x64/
+python/
+
+# IDA Plugin specific
+*.dll
+*.p64
+*.b64
+*.i64
+*.s64
+*.til
+*.idb
+*.id0
+*.id1
+*.nam
+*.cfg
+ai_assistant.cfg
+
+# Temporary files
+*.tmp
+*.temp
+*.bak

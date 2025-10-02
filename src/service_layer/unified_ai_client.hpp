@@ -21,7 +21,7 @@
 // Unified AI Client - replaces 6 different AI client classes
 // Configuration-driven behavior for all AI providers
 
-class UnifiedAIClient : public AIClientBase
+class UnifiedAIClient
 {
 public:
     using callback_t = std::function<void(const std::string&)>;
@@ -37,7 +37,7 @@ public:
                            ConnectionPool& connection_pool,
                            RequestCache& request_cache);
 
-    ~UnifiedAIClient() override;
+    ~UnifiedAIClient();
 
     // Connection test result structure
     struct ConnectionTestResult {
@@ -47,17 +47,17 @@ public:
         int response_time_ms;
     };
 
-    // AIClientBase interface implementation (using standard C++ types)
-    bool is_available() const override;
-    ConnectionTestResult test_connection() override;
-    void analyze_function(uint64_t address, callback_t callback) override;
-    void suggest_name(uint64_t address, callback_t callback) override;
-    void generate_struct(uint64_t address, callback_t callback) override;
-    void generate_comment(uint64_t address, callback_t callback) override;
-    void generate_hook(uint64_t address, callback_t callback) override;
-    void custom_query(uint64_t address, const std::string& question, callback_t callback) override;
-    void locate_global_pointer(uint64_t address, const std::string& target_name, addr_callback_t callback) override;
-    void rename_all(uint64_t address, callback_t callback) override;
+    // Core AI client interface (using standard C++ types)
+    bool is_available() const;
+    ConnectionTestResult test_connection();
+    void analyze_function(uint64_t address, callback_t callback);
+    void suggest_name(uint64_t address, callback_t callback);
+    void generate_struct(uint64_t address, callback_t callback);
+    void generate_comment(uint64_t address, callback_t callback);
+    void generate_hook(uint64_t address, callback_t callback);
+    void custom_query(uint64_t address, const std::string& question, callback_t callback);
+    void locate_global_pointer(uint64_t address, const std::string& target_name, addr_callback_t callback);
+    void rename_all(uint64_t address, callback_t callback);
 
     // Cancel current request
     void cancel_current_request();
@@ -115,7 +115,7 @@ private:
 
     // HTTP request execution with retry logic
     std::string _execute_http_request(const std::string& url,
-                                    const httplib::Headers& headers,
+                                    const thirdparty_compat::Headers& headers,
                                     const std::string& body);
 
     // Request caching key generation
